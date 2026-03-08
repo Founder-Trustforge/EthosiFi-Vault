@@ -1,4 +1,4 @@
-# Ethos-Wallet
+# EthosiFi-Vault
 The unstealable Wallet
 ## License
 
