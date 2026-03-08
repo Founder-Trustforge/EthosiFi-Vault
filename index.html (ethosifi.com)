@@ -292,6 +292,8 @@
     <nav>
         <div class="logo">EthosiFi</div>
         <div class="nav-links">
+            <a href="/">Home</a>
+            <a href="/pricing.html">Pricing</a>
             <a href="#features">Features</a>
             <a href="mailto:founder@ethosifi.com">Contact</a>
             <a href="https://ethosifi.xyz" class="btn-primary">Try Vault</a>
@@ -310,6 +312,7 @@
             </p>
             <div class="hero-cta">
                 <a href="https://ethosifi.xyz" class="btn-primary">Try Testnet Free</a>
+                <a href="/pricing.html" class="btn-secondary">View Pricing</a>
                 <a href="mailto:founder@ethosifi.com" class="btn-secondary">Contact Founder</a>
             </div>
         </div>
@@ -381,6 +384,7 @@
         <p style="margin-top: 0.5rem;">
             <a href="https://twitter.com/ethosifi" style="color: var(--text-secondary); margin: 0 1rem;">Twitter</a>
             <a href="https://github.com/ethosifi" style="color: var(--text-secondary); margin: 0 1rem;">GitHub</a>
+            <a href="/pricing.html" style="color: var(--text-secondary); margin: 0 1rem;">Pricing</a>
             <a href="mailto:founder@ethosifi.com" style="color: var(--text-secondary); margin: 0 1rem;">Contact</a>
         </p>
     </footer>
