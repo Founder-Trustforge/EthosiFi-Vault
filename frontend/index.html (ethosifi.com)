@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EthosiFi Vault - The Unstealable Wallet</title>
+    <meta name="description" content="EthosiFi Vault. Time-locked protection with biometric bypass. No seed phrases. No gas fees.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --accent: #00d4aa;
+            --accent-glow: rgba(0, 212, 170, 0.15);
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0b0;
+            --border: #1f1f2e;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+        nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            padding: 1.5rem 5%;
+            background: rgba(10, 10, 15, 0.8);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            z-index: 1000;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--accent), #00a884);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+        }
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+        .nav-links a:hover { color: var(--text-primary); }
+        .btn-primary {
+            background: var(--accent);
+            color: var(--bg-primary);
+            padding: 0.6rem 1.2rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.9rem;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px var(--accent-glow);
+        }
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8rem 5% 4rem;
+            position: relative;
+        }
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 800px;
+            height: 800px;
+            background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+            pointer-events: none;
+        }
+        .hero-content {
+            max-width: 900px;
+            text-align: center;
+            position: relative;
+            z-index: 1;
+        }
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            padding: 0.5rem 1rem;
+            border-radius: 100px;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+        }
+        .badge::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            background: var(--accent);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        h1 {
+            font-size: clamp(2.5rem, 6vw, 4.5rem);
+            font-weight: 800;
+            line-height: 1.1;
+            letter-spacing: -0.03em;
+            margin-bottom: 1.5rem;
+        }
+        .gradient-text {
+            background: linear-gradient(135deg, var(--accent), #00a884);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .hero-subtitle {
+            font-size: 1.25rem;
+            color: var(--text-secondary);
+            max-width: 600px;
+            margin: 0 auto 2.5rem;
+            line-height: 1.6;
+        }
+        .hero-cta {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .btn-secondary {
+            background: transparent;
+            color: var(--text-primary);
+            padding: 0.6rem 1.2rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.9rem;
+            border: 1px solid var(--border);
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .btn-secondary:hover {
+            background: var(--bg-secondary);
+            border-color: var(--accent);
+        }
+        .stats {
+            padding: 4rem 5%;
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+        }
+        .stats-grid {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 3rem;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: var(--accent);
+            display: block;
+        }
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-top: 0.5rem;
+        }
+        .features {
+            padding: 6rem 5%;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .section-header {
+            text-align: center;
+            margin-bottom: 4rem;
+        }
+        .section-header h2 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+        .section-header p {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+        }
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 2rem;
+        }
+        .feature-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 2rem;
+            transition: all 0.3s;
+        }
+        .feature-card:hover {
+            border-color: var(--accent);
+            transform: translateY(-4px);
+        }
+        .feature-icon {
+            width: 48px;
+            height: 48px;
+            background: var(--accent-glow);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1.5rem;
+            font-size: 1.5rem;
+        }
+        .feature-card h3 {
+            font-size: 1.25rem;
+            margin-bottom: 0.75rem;
+        }
+        .feature-card p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+        .testnet-cta {
+            padding: 6rem 5%;
+            text-align: center;
+            background: linear-gradient(180deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+        }
+        .testnet-box {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 3rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            position: relative;
+            overflow: hidden;
+        }
+        .testnet-box::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
+        }
+        .testnet-box h2 {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+        }
+        .testnet-box p {
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+        }
+        footer {
+            padding: 3rem 5%;
+            border-top: 1px solid var(--border);
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+        @media (max-width: 768px) {
+            .nav-links { display: none; }
+            .hero { padding: 6rem 5% 3rem; }
+            .features-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="logo">EthosiFi</div>
+        <div class="nav-links">
+            <a href="/">Home</a>
+            <a href="/pricing.html">Pricing</a>
+            <a href="#features">Features</a>
+            <a href="mailto:founder@ethosifi.com">Contact</a>
+            <a href="https://ethosifi.xyz" class="btn-primary">Try Vault</a>
+        </div>
+    </nav>
+
+    <section class="hero">
+        <div class="hero-content">
+            <div class="badge">Testnet Live on Base Sepolia</div>
+            <h1>
+                EthosiFi <span class="gradient-text">Vault</span>
+            </h1>
+            <p class="hero-subtitle">
+                The unstealable wallet. Time-locked protection with biometric bypass. 
+                No seed phrases. No gas fees. Your assets stay yours, even when your keys don't.
+            </p>
+            <div class="hero-cta">
+                <a href="https://ethosifi.xyz" class="btn-primary">Try Testnet Free</a>
+                <a href="/pricing.html" class="btn-secondary">View Pricing</a>
+                <a href="mailto:founder@ethosifi.com" class="btn-secondary">Contact Founder</a>
+            </div>
+        </div>
+    </section>
+
+    <section class="stats">
+        <div class="stats-grid">
+            <div>
+                <span class="stat-value">$2.9B</span>
+                <div class="stat-label">Stolen in 2024</div>
+            </div>
+            <div>
+                <span class="stat-value">0</span>
+                <div class="stat-label">Testnet Hacks</div>
+            </div>
+            <div>
+                <span class="stat-value">48h</span>
+                <div class="stat-label">Time-Lock Protection</div>
+            </div>
+            <div>
+                <span class="stat-value">10s</span>
+                <div class="stat-label">Vault Creation</div>
+            </div>
+        </div>
+    </section>
+
+    <section class="features" id="features">
+        <div class="section-header">
+            <h2>Armor, Not Warnings</h2>
+            <p>From Anti-Scam verification to impenetrable infrastructure</p>
+        </div>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">🛡️</div>
+                <h3>Time-Locked Withdrawals</h3>
+                <p>Every high-value transfer enters a 48 hour delay. Thieves can't rush, but you can bypass instantly with biometrics.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🔐</div>
+                <h3>Biometric Authentication</h3>
+                <p>Face ID. Touch ID. No seed phrases to lose or leak. Your biology is your backup.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">👥</div>
+                <h3>Guardian Network</h3>
+                <p>Trusted contacts freeze suspicious transactions during the delay period. Decentralized security.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">⚡</div>
+                <h3>Gasless Transactions</h3>
+                <p>Pay in USDC, DAI, or any token. Never hold ETH for gas. Invisible blockchain complexity.</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="testnet-cta">
+        <div class="testnet-box">
+            <h2>Try EthosiFi Vault</h2>
+            <p>Live on Base Sepolia. Free testnet ETH. No real funds at risk. Experience the unstealable wallet.</p>
+            <a href="https://ethosifi.xyz" class="btn-primary">Launch Testnet Vault</a>
+            <p style="margin-top: 1.5rem; font-size: 0.85rem; color: var(--text-secondary);">
+                Need testnet ETH? <a href="https://www.coinbase.com/faucets/base-ethereum-sepolia-faucet" target="_blank" style="color: var(--accent);">Get it free from Coinbase</a>
+            </p>
+        </div>
+    </section>
+
+    <footer>
+        <p>© 2025 EthosiFi. Open source. Audits pending. Built on ERC-7579.</p>
+        <p style="margin-top: 0.5rem;">
+            <a href="https://twitter.com/ethosifi" style="color: var(--text-secondary); margin: 0 1rem;">Twitter</a>
+            <a href="https://github.com/ethosifi" style="color: var(--text-secondary); margin: 0 1rem;">GitHub</a>
+            <a href="/pricing.html" style="color: var(--text-secondary); margin: 0 1rem;">Pricing</a>
+            <a href="mailto:founder@ethosifi.com" style="color: var(--text-secondary); margin: 0 1rem;">Contact</a>
+        </p>
+    </footer>
+</body>
+</html>

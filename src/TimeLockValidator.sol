@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
+<<<<<<< HEAD
 import {IValidator} from "erc7579/interfaces/IModule.sol";
+=======
+import {IERC7579Validator} from "erc7579/interfaces/IERC7579Module.sol";
+>>>>>>> origin/main
 import {PackedUserOperation} from "account-abstraction/interfaces/PackedUserOperation.sol";
 import {SignatureCheckerLib} from "solady/utils/SignatureCheckerLib.sol";
 
@@ -9,7 +13,11 @@ import {SignatureCheckerLib} from "solady/utils/SignatureCheckerLib.sol";
  * @title TimeLockValidator
  * @notice EthosiFi Vault - Core security module with time-locks and biometric bypass
  */
+<<<<<<< HEAD
 contract TimeLockValidator is IValidator {
+=======
+contract TimeLockValidator is IERC7579Validator {
+>>>>>>> origin/main
     using SignatureCheckerLib for address;
     
     uint256 constant MODULE_TYPE_VALIDATOR = 1;
@@ -48,7 +56,11 @@ contract TimeLockValidator is IValidator {
     event GuardianApproved(bytes32 indexed txHash, address indexed guardian);
     event BiometricRegistered(address indexed account);
     
+<<<<<<< HEAD
     function onInstall(bytes calldata data) external {
+=======
+    function onInstall(bytes calldata data) external override {
+>>>>>>> origin/main
         require(!accounts[msg.sender].initialized, "Already installed");
         
         (address[] memory guardians, uint256 threshold, uint256 customDelay) = abi.decode(
@@ -66,7 +78,11 @@ contract TimeLockValidator is IValidator {
         emit BiometricRegistered(msg.sender);
     }
     
+<<<<<<< HEAD
     function onUninstall(bytes calldata) external {
+=======
+    function onUninstall(bytes calldata) external override {
+>>>>>>> origin/main
         delete accounts[msg.sender];
     }
     
@@ -74,7 +90,11 @@ contract TimeLockValidator is IValidator {
         PackedUserOperation calldata userOp,
         bytes32 userOpHash,
         uint256
+<<<<<<< HEAD
     ) external returns (uint256) {
+=======
+    ) external view override returns (uint256 validationData) {
+>>>>>>> origin/main
         AccountConfig storage config = accounts[msg.sender];
         require(config.initialized, "Not installed");
         
@@ -204,6 +224,7 @@ contract TimeLockValidator is IValidator {
         _;
     }
     
+<<<<<<< HEAD
     function isModuleType(uint256 moduleTypeId) external pure returns (bool) {
         return moduleTypeId == MODULE_TYPE_VALIDATOR;
     }
@@ -221,3 +242,13 @@ contract TimeLockValidator is IValidator {
     }
 
 }
+=======
+    function isModuleType(uint256 moduleTypeId) external pure override returns (bool) {
+        return moduleTypeId == MODULE_TYPE_VALIDATOR;
+    }
+    
+    function isInitialized(address smartAccount) external view override returns (bool) {
+        return accounts[smartAccount].initialized;
+    }
+}
+>>>>>>> origin/main

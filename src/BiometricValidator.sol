@@ -1,14 +1,22 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
+<<<<<<< HEAD
 import {IValidator} from "erc7579/interfaces/IModule.sol";
+=======
+import {IERC7579Validator} from "erc7579/interfaces/IERC7579Module.sol";
+>>>>>>> origin/main
 import {PackedUserOperation} from "account-abstraction/interfaces/PackedUserOperation.sol";
 
 /**
  * @title BiometricValidator
  * @notice EthosiFi Vault - WebAuthn/FIDO2 signature verification
  */
+<<<<<<< HEAD
 contract BiometricValidator is IValidator {
+=======
+contract BiometricValidator is IERC7579Validator {
+>>>>>>> origin/main
     
     struct WebAuthnSignature {
         bytes authenticatorData;
@@ -23,7 +31,11 @@ contract BiometricValidator is IValidator {
     
     event CredentialRegistered(address indexed account, bytes32 indexed credentialId);
     
+<<<<<<< HEAD
     function onInstall(bytes calldata data) external {
+=======
+    function onInstall(bytes calldata data) external override {
+>>>>>>> origin/main
         require(!initialized[msg.sender], "Already initialized");
         
         (bytes32 credentialId, uint256[2] memory pubKey) = abi.decode(data, (bytes32, uint256[2]));
@@ -35,7 +47,11 @@ contract BiometricValidator is IValidator {
         emit CredentialRegistered(msg.sender, credentialId);
     }
     
+<<<<<<< HEAD
     function onUninstall(bytes calldata) external {
+=======
+    function onUninstall(bytes calldata) external override {
+>>>>>>> origin/main
         delete credentialIds[msg.sender];
         delete publicKeys[credentialIds[msg.sender]];
         initialized[msg.sender] = false;
@@ -45,7 +61,11 @@ contract BiometricValidator is IValidator {
         PackedUserOperation calldata userOp,
         bytes32 userOpHash,
         uint256
+<<<<<<< HEAD
     ) external returns (uint256) {
+=======
+    ) external view override returns (uint256 validationData) {
+>>>>>>> origin/main
         require(initialized[msg.sender], "Not initialized");
         
         bytes32 credId = credentialIds[msg.sender];
@@ -68,6 +88,7 @@ contract BiometricValidator is IValidator {
         return true;
     }
     
+<<<<<<< HEAD
     function isModuleType(uint256 moduleTypeId) external pure returns (bool) {
         return moduleTypeId == 1;
     }
@@ -85,3 +106,13 @@ contract BiometricValidator is IValidator {
     }
 
 }
+=======
+    function isModuleType(uint256 moduleTypeId) external pure override returns (bool) {
+        return moduleTypeId == 1;
+    }
+    
+    function isInitialized(address account) external view override returns (bool) {
+        return initialized[account];
+    }
+}
+>>>>>>> origin/main

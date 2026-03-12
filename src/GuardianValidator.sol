@@ -1,14 +1,22 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
+<<<<<<< HEAD
 import {IValidator} from "erc7579/interfaces/IModule.sol";
 import {PackedUserOperation} from "account-abstraction/interfaces/PackedUserOperation.sol";
+=======
+import {IERC7579Validator} from "erc7579/interfaces/IERC7579Module.sol";
+>>>>>>> origin/main
 
 /**
  * @title GuardianValidator
  * @notice EthosiFi Vault - Social recovery with time delays
  */
+<<<<<<< HEAD
 contract GuardianValidator is IValidator {
+=======
+contract GuardianValidator is IERC7579Validator {
+>>>>>>> origin/main
     
     struct Guardian {
         address addr;
@@ -37,7 +45,11 @@ contract GuardianValidator is IValidator {
     event GuardianApproved(address indexed account, address indexed guardian);
     event RecoveryExecuted(address indexed account);
     
+<<<<<<< HEAD
     function onInstall(bytes calldata data) external {
+=======
+    function onInstall(bytes calldata data) external override {
+>>>>>>> origin/main
         require(!initialized[msg.sender], "Already initialized");
         
         (Guardian[] memory _guardians, uint256 _threshold) = abi.decode(data, (Guardian[], uint256));
@@ -50,7 +62,11 @@ contract GuardianValidator is IValidator {
         initialized[msg.sender] = true;
     }
     
+<<<<<<< HEAD
     function onUninstall(bytes calldata) external {
+=======
+    function onUninstall(bytes calldata) external override {
+>>>>>>> origin/main
         delete guardians[msg.sender];
         delete threshold[msg.sender];
         initialized[msg.sender] = false;
@@ -99,7 +115,11 @@ contract GuardianValidator is IValidator {
         emit RecoveryExecuted(account);
     }
     
+<<<<<<< HEAD
     function _getGuardian(address account, address addr) internal view returns (Guardian storage) {
+=======
+    function _getGuardian(address account, addr) internal view returns (Guardian storage) {
+>>>>>>> origin/main
         for (uint256 i = 0; i < guardians[account].length; i++) {
             if (guardians[account][i].addr == addr) {
                 return guardians[account][i];
@@ -120,6 +140,7 @@ contract GuardianValidator is IValidator {
         _;
     }
     
+<<<<<<< HEAD
     function validateUserOp(PackedUserOperation calldata userOp, bytes32 userOpHash) external pure returns (uint256) {
         return 1; // This validator doesn't validate userOps directly
     }
@@ -141,3 +162,17 @@ contract GuardianValidator is IValidator {
     }
 
 }
+=======
+    function validateUserOp(PackedUserOperation calldata, bytes32, uint256) external pure override returns (uint256) {
+        return 1; // This validator doesn't validate userOps directly
+    }
+    
+    function isModuleType(uint256 moduleTypeId) external pure override returns (bool) {
+        return moduleTypeId == 1;
+    }
+    
+    function isInitialized(address account) external view override returns (bool) {
+        return initialized[account];
+    }
+}
+>>>>>>> origin/main
