@@ -13,6 +13,7 @@ pragma solidity ^0.8.23;
  * - Every burn permanently reduces total supply
  *
  * EthosiFi Vault — The Unstealable Wallet
+ */
 contract EthosToken {
 
     // ─── ERC-20 STATE ───────────────────────────────────────────────────────
@@ -30,15 +31,13 @@ contract EthosToken {
 
     // ─── ALLOCATION CONSTANTS ────────────────────────────────────────────────
 
-    uint256 public constant REWARDS_POOL_ALLOC    = 40_000_000 * 1e18; // 40%
-    uint256 public constant TREASURY_ALLOC        = 20_000_000 * 1e18; // 20%
-    uint256 public constant TEAM_ALLOC            = 20_000_000 * 1e18; // 20%
-    uint256 public constant ECOSYSTEM_ALLOC       = 10_000_000 * 1e18; // 10%
-    uint256 public constant EARLY_CONTRIBUTOR_ALLOC = 5_000_000 * 1e18; // 5%
-    uint256 public constant PUBLIC_LAUNCH_ALLOC   =  5_000_000 * 1e18; // 5%
-
-    // Burn rate per subscription period (100 $ETHOS)
-    uint256 public constant SUBSCRIPTION_BURN = 100 * 1e18;
+    uint256 public constant REWARDS_POOL_ALLOC      = 40_000_000 * 1e18;
+    uint256 public constant TREASURY_ALLOC          = 20_000_000 * 1e18;
+    uint256 public constant TEAM_ALLOC              = 20_000_000 * 1e18;
+    uint256 public constant ECOSYSTEM_ALLOC         = 10_000_000 * 1e18;
+    uint256 public constant EARLY_CONTRIBUTOR_ALLOC =  5_000_000 * 1e18;
+    uint256 public constant PUBLIC_LAUNCH_ALLOC     =  5_000_000 * 1e18;
+    uint256 public constant SUBSCRIPTION_BURN       =        100 * 1e18;
 
     // ─── ACCESS CONTROL ──────────────────────────────────────────────────────
 
@@ -46,14 +45,12 @@ contract EthosToken {
     address public stakingContract;
     address public paymasterContract;
     address public liquidityManager;
-
-    // Authorized burners (staking, paymaster, liquidity contracts)
     mapping(address => bool) public authorizedBurners;
 
     // ─── VESTING ─────────────────────────────────────────────────────────────
 
     address public teamVestingContract;
-    uint256 public teamTGEUnlocked; // 10M at TGE
+    uint256 public teamTGEUnlocked;
     bool    public tgeExecuted;
 
     // ─── EVENTS ──────────────────────────────────────────────────────────────
@@ -74,7 +71,6 @@ contract EthosToken {
     error TGEAlreadyExecuted();
     error ZeroAddress();
     error ZeroAmount();
-    }
 
     // ─── CONSTRUCTOR ─────────────────────────────────────────────────────────
 
@@ -87,36 +83,25 @@ contract EthosToken {
     ) {
         owner = msg.sender;
         totalSupply = TOTAL_SUPPLY;
+        teamVestingContract = _teamVesting;
 
-        // Mint allocations
-        // Rewards pool stays in contract, distributed as non-transferable credits
-        balanceOf[address(this)] = REWARDS_POOL_ALLOC;
-        emit Transfer(address(0), address(this), REWARDS_POOL_ALLOC);
+        balanceOf[address(this)] = REWARDS_POOL_ALLOC + TEAM_ALLOC / 2;
+        emit Transfer(address(0), address(this), REWARDS_POOL_ALLOC + TEAM_ALLOC / 2);
 
-        // Treasury
         balanceOf[_treasury] = TREASURY_ALLOC;
         emit Transfer(address(0), _treasury, TREASURY_ALLOC);
 
-        // Ecosystem growth
         balanceOf[_ecosystem] = ECOSYSTEM_ALLOC;
         emit Transfer(address(0), _ecosystem, ECOSYSTEM_ALLOC);
 
-        // Early contributors — fully unlocked at TGE
         balanceOf[_earlyContributors] = EARLY_CONTRIBUTOR_ALLOC;
         emit Transfer(address(0), _earlyContributors, EARLY_CONTRIBUTOR_ALLOC);
 
-        // Public launch — fully unlocked at TGE
         balanceOf[_publicLaunch] = PUBLIC_LAUNCH_ALLOC;
         emit Transfer(address(0), _publicLaunch, PUBLIC_LAUNCH_ALLOC);
 
-        // Team: 10M to vesting contract now, 10M at TGE
-        teamVestingContract = _teamVesting;
-        balanceOf[_teamVesting] = TEAM_ALLOC / 2; // 10M to vesting
+        balanceOf[_teamVesting] = TEAM_ALLOC / 2;
         emit Transfer(address(0), _teamVesting, TEAM_ALLOC / 2);
-
-        // 10M held in contract for TGE unlock
-        balanceOf[address(this)] += TEAM_ALLOC / 2;
-        emit Transfer(address(0), address(this), TEAM_ALLOC / 2);
     }
 
     // ─── ERC-20 FUNCTIONS ────────────────────────────────────────────────────
@@ -124,11 +109,10 @@ contract EthosToken {
     function transfer(address to, uint256 amount) external returns (bool) {
         if (to == address(0)) revert ZeroAddress();
         if (balanceOf[msg.sender] < amount) revert InsufficientBalance();
-    }
-        unchecked{
+        unchecked {
             balanceOf[msg.sender] -= amount;
             balanceOf[to] += amount;
-        
+        }
         emit Transfer(msg.sender, to, amount);
         return true;
     }
@@ -143,65 +127,50 @@ contract EthosToken {
         if (to == address(0)) revert ZeroAddress();
         if (balanceOf[from] < amount) revert InsufficientBalance();
         if (allowance[from][msg.sender] < amount) revert InsufficientAllowance();
-    }
         unchecked {
             balanceOf[from] -= amount;
             allowance[from][msg.sender] -= amount;
             balanceOf[to] += amount;
+        }
         emit Transfer(from, to, amount);
         return true;
     }
 
     // ─── BURN FUNCTIONS ──────────────────────────────────────────────────────
 
-    /**
-     * @notice Burn tokens from a user's account (called by authorized contracts)
-     * @dev Only staking, paymaster, and liquidity contracts can burn
-     * @param from Address to burn from
-     * @param amount Amount to burn
-     */
     function burnFrom(address from, uint256 amount) external {
         if (!authorizedBurners[msg.sender]) revert NotAuthorizedBurner();
         if (amount == 0) revert ZeroAmount();
         if (balanceOf[from] < amount) revert InsufficientBalance();
-    }
         unchecked {
             balanceOf[from] -= amount;
             totalSupply -= amount;
             totalBurned += amount;
+        }
         emit Transfer(from, address(0), amount);
         emit Burn(msg.sender, from, amount, totalSupply);
     }
 
-    /**
-     * @notice Burn your own tokens
-     */
     function burn(uint256 amount) external {
         if (amount == 0) revert ZeroAmount();
         if (balanceOf[msg.sender] < amount) revert InsufficientBalance();
-    }
         unchecked {
             balanceOf[msg.sender] -= amount;
             totalSupply -= amount;
             totalBurned += amount;
-
+        }
         emit Transfer(msg.sender, address(0), amount);
         emit Burn(msg.sender, msg.sender, amount, totalSupply);
     }
 
-    /**
-     * @notice Burn subscription fee — exactly SUBSCRIPTION_BURN (100 $ETHOS)
-     * @dev Convenience function called by paymaster for subscription payments
-     */
     function burnSubscriptionFee(address subscriber) external {
         if (!authorizedBurners[msg.sender]) revert NotAuthorizedBurner();
         if (balanceOf[subscriber] < SUBSCRIPTION_BURN) revert InsufficientBalance();
-    }
         unchecked {
             balanceOf[subscriber] -= SUBSCRIPTION_BURN;
             totalSupply -= SUBSCRIPTION_BURN;
             totalBurned += SUBSCRIPTION_BURN;
-
+        }
         emit Transfer(subscriber, address(0), SUBSCRIPTION_BURN);
         emit Burn(msg.sender, subscriber, SUBSCRIPTION_BURN, totalSupply);
     }
@@ -251,3 +220,4 @@ contract EthosToken {
         burned = totalBurned;
         percentBurned = (totalBurned * 100) / TOTAL_SUPPLY;
     }
+}
