@@ -74,6 +74,7 @@ contract EthosToken {
     error TGEAlreadyExecuted();
     error ZeroAddress();
     error ZeroAmount();
+    }
 
     // ─── CONSTRUCTOR ─────────────────────────────────────────────────────────
 
