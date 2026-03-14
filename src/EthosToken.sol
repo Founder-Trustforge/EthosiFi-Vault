@@ -252,4 +252,3 @@ contract EthosToken {
         burned = totalBurned;
         percentBurned = (totalBurned * 100) / TOTAL_SUPPLY;
     }
-}
