@@ -189,12 +189,4 @@ contract EmergencyFreeze is IModule {
     function isInitialized(address account) external view returns (bool) {
         return configs[account].initialized;
     }
-
-    function validateUserOp(PackedUserOperation calldata, bytes32) external override returns (uint256) {
-        return 0;
-    }
-
-    function isValidSignatureWithSender(address, bytes32, bytes calldata) external pure override returns (bytes4) {
-        return 0xffffffff;
-    }
-
+}

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: BSL-1.1
 pragma solidity ^0.8.23;
+import {PackedUserOperation} from "account-abstraction/interfaces/PackedUserOperation.sol";
 
 import {IModule} from "erc7579/interfaces/IModule.sol";
 
@@ -255,12 +256,6 @@ contract AntiScamScreener is IModule {
         return configs[account].initialized;
     }
 
-    function validateUserOp(PackedUserOperation calldata, bytes32) external override returns (uint256) {
-        return 0;
-    }
 
-    function isValidSignatureWithSender(address, bytes32, bytes calldata) external pure override returns (bytes4) {
-        return 0xffffffff;
-    }
 
 }
