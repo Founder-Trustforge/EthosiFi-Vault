@@ -165,7 +165,6 @@ contract EthosToken {
         if (amount == 0) revert ZeroAmount();
         if (balanceOf[from] < amount) revert InsufficientBalance();
     }
-
         unchecked {
             balanceOf[from] -= amount;
             totalSupply -= amount;
