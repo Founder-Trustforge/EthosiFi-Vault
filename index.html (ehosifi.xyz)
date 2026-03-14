@@ -1,0 +1,1300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EthosiFi Hub — The Security-First Crypto Community</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Syne:wght@400;600;800&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #020818;
+    --navy2: #050f2a;
+    --cyan: #00d4ff;
+    --cyan2: #00ffea;
+    --electric: #0088ff;
+    --gold: #ffd700;
+    --red: #ff3355;
+    --green: #00ff88;
+    --purple: #8855ff;
+    --white: #f0f8ff;
+    --muted: #5a7a9a;
+    --card: rgba(5, 20, 50, 0.7);
+    --border: rgba(0, 212, 255, 0.15);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--navy);
+    color: var(--white);
+    font-family: 'Syne', sans-serif;
+    overflow-x: hidden;
+    cursor: none;
+  }
+
+  /* Custom cursor */
+  .cursor {
+    position: fixed;
+    width: 12px; height: 12px;
+    background: var(--cyan);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 99999;
+    transform: translate(-50%, -50%);
+    transition: transform 0.1s, width 0.2s, height 0.2s, opacity 0.2s;
+    mix-blend-mode: screen;
+  }
+  .cursor-ring {
+    position: fixed;
+    width: 36px; height: 36px;
+    border: 1px solid rgba(0,212,255,0.4);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 99998;
+    transform: translate(-50%, -50%);
+    transition: transform 0.15s ease, width 0.3s, height 0.3s;
+  }
+
+  /* Animated grid background */
+  .grid-bg {
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+    background-size: 60px 60px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Nebula orbs */
+  .orb {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(80px);
+    pointer-events: none;
+    z-index: 0;
+    animation: orbFloat 12s ease-in-out infinite;
+  }
+  .orb1 { width: 600px; height: 600px; background: rgba(0,136,255,0.08); top: -200px; right: -100px; animation-delay: 0s; }
+  .orb2 { width: 400px; height: 400px; background: rgba(0,255,234,0.06); bottom: 100px; left: -150px; animation-delay: -4s; }
+  .orb3 { width: 300px; height: 300px; background: rgba(136,85,255,0.07); top: 40%; right: 20%; animation-delay: -8s; }
+
+  @keyframes orbFloat {
+    0%, 100% { transform: translateY(0) scale(1); }
+    50% { transform: translateY(-40px) scale(1.05); }
+  }
+
+  /* Scanline overlay */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* NAV */
+  nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 1000;
+    padding: 0 40px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(2, 8, 24, 0.85);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .nav-logo {
+    font-family: 'Orbitron', monospace;
+    font-size: 20px;
+    font-weight: 900;
+    color: var(--cyan);
+    letter-spacing: 2px;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .nav-logo .shield {
+    width: 28px; height: 28px;
+    background: linear-gradient(135deg, var(--cyan), var(--electric));
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+  }
+
+  .nav-links {
+    display: flex;
+    gap: 32px;
+    list-style: none;
+  }
+
+  .nav-links a {
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    transition: color 0.2s;
+  }
+
+  .nav-links a:hover { color: var(--cyan); }
+
+  .nav-cta {
+    background: transparent;
+    border: 1px solid var(--cyan);
+    color: var(--cyan);
+    padding: 8px 20px;
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    cursor: none;
+    transition: all 0.2s;
+    text-decoration: none;
+  }
+  .nav-cta:hover {
+    background: var(--cyan);
+    color: var(--navy);
+  }
+
+  /* HERO */
+  .hero {
+    position: relative;
+    z-index: 2;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 120px 40px 80px;
+  }
+
+  .hero-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--cyan);
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    margin-bottom: 24px;
+    opacity: 0;
+    animation: fadeUp 0.8s ease 0.2s forwards;
+  }
+
+  .hero-title {
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(40px, 7vw, 88px);
+    font-weight: 900;
+    line-height: 1.05;
+    margin-bottom: 8px;
+    opacity: 0;
+    animation: fadeUp 0.8s ease 0.4s forwards;
+  }
+
+  .hero-title .line1 { color: var(--white); display: block; }
+  .hero-title .line2 {
+    display: block;
+    background: linear-gradient(90deg, var(--cyan), var(--cyan2), var(--electric));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .hero-sub {
+    font-size: 18px;
+    color: var(--muted);
+    max-width: 600px;
+    line-height: 1.7;
+    margin: 24px auto 48px;
+    opacity: 0;
+    animation: fadeUp 0.8s ease 0.6s forwards;
+  }
+
+  .hero-stats {
+    display: flex;
+    gap: 48px;
+    justify-content: center;
+    margin-bottom: 64px;
+    opacity: 0;
+    animation: fadeUp 0.8s ease 0.8s forwards;
+  }
+
+  .stat {
+    text-align: center;
+  }
+  .stat-val {
+    font-family: 'Orbitron', monospace;
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--cyan);
+    display: block;
+  }
+  .stat-label {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-top: 4px;
+    display: block;
+  }
+
+  .hero-scroll {
+    position: absolute;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    opacity: 0;
+    animation: fadeUp 0.8s ease 1.2s forwards;
+  }
+  .hero-scroll span {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+  .scroll-line {
+    width: 1px;
+    height: 40px;
+    background: linear-gradient(var(--cyan), transparent);
+    animation: scrollPulse 2s ease infinite;
+  }
+  @keyframes scrollPulse {
+    0%, 100% { opacity: 0.3; transform: scaleY(1); }
+    50% { opacity: 1; transform: scaleY(1.2); }
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(30px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* SECTION LABEL */
+  .section-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--cyan);
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    text-align: center;
+    margin-bottom: 16px;
+  }
+
+  .section-title {
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(28px, 4vw, 44px);
+    font-weight: 900;
+    text-align: center;
+    margin-bottom: 16px;
+    color: var(--white);
+  }
+
+  .section-sub {
+    text-align: center;
+    color: var(--muted);
+    font-size: 16px;
+    max-width: 560px;
+    margin: 0 auto 64px;
+    line-height: 1.7;
+  }
+
+  /* HUB TILES */
+  .hub-section {
+    position: relative;
+    z-index: 2;
+    padding: 100px 40px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .tiles-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: auto auto;
+    gap: 20px;
+  }
+
+  /* Featured large tiles */
+  .tile:nth-child(1) { grid-column: span 2; grid-row: span 1; }
+  .tile:nth-child(2) { grid-column: span 2; grid-row: span 1; }
+  .tile:nth-child(7) { grid-column: span 2; }
+  .tile:nth-child(8) { grid-column: span 2; }
+
+  .tile {
+    position: relative;
+    background: var(--card);
+    border: 1px solid var(--border);
+    padding: 36px;
+    overflow: hidden;
+    cursor: none;
+    transition: transform 0.3s, border-color 0.3s, box-shadow 0.3s;
+    text-decoration: none;
+    color: inherit;
+    display: block;
+  }
+
+  .tile::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(0,212,255,0.05), transparent);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .tile:hover {
+    transform: translateY(-6px);
+    border-color: rgba(0,212,255,0.4);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4), 0 0 30px rgba(0,212,255,0.1);
+  }
+
+  .tile:hover::before { opacity: 1; }
+
+  .tile-accent {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 3px;
+  }
+
+  .tile-icon {
+    font-size: 36px;
+    margin-bottom: 20px;
+    display: block;
+  }
+
+  .tile-num {
+    position: absolute;
+    top: 20px; right: 24px;
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    color: var(--border);
+    letter-spacing: 2px;
+  }
+
+  .tile-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    display: block;
+  }
+
+  .tile-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    color: var(--white);
+    line-height: 1.3;
+  }
+
+  .tile-desc {
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.7;
+  }
+
+  .tile-arrow {
+    position: absolute;
+    bottom: 28px; right: 28px;
+    width: 32px; height: 32px;
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    transition: all 0.3s;
+    color: var(--muted);
+  }
+
+  .tile:hover .tile-arrow {
+    border-color: var(--cyan);
+    color: var(--cyan);
+    background: rgba(0,212,255,0.1);
+  }
+
+  /* BG glow inside tiles */
+  .tile-glow {
+    position: absolute;
+    width: 200px; height: 200px;
+    border-radius: 50%;
+    filter: blur(60px);
+    bottom: -60px; right: -60px;
+    opacity: 0.15;
+    pointer-events: none;
+  }
+
+  /* TICKER BAR */
+  .ticker-bar {
+    position: relative;
+    z-index: 2;
+    background: rgba(0,212,255,0.05);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 0;
+    overflow: hidden;
+  }
+
+  .ticker-track {
+    display: flex;
+    gap: 48px;
+    animation: ticker 30s linear infinite;
+    white-space: nowrap;
+  }
+
+  .ticker-item {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .ticker-item .up { color: var(--green); }
+  .ticker-item .down { color: var(--red); }
+
+  @keyframes ticker {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+
+  /* ALERT BANNER */
+  .alert-banner {
+    position: relative;
+    z-index: 2;
+    margin: 0 40px;
+    background: rgba(255, 51, 85, 0.08);
+    border: 1px solid rgba(255, 51, 85, 0.3);
+    padding: 16px 28px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-top: 40px;
+  }
+
+  .alert-dot {
+    width: 8px; height: 8px;
+    background: var(--red);
+    border-radius: 50%;
+    animation: blink 1.5s ease infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--red); }
+    50% { opacity: 0.3; box-shadow: none; }
+  }
+
+  .alert-label {
+    font-family: 'Orbitron', monospace;
+    font-size: 10px;
+    color: var(--red);
+    letter-spacing: 3px;
+    flex-shrink: 0;
+  }
+
+  .alert-text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: rgba(255,51,85,0.8);
+  }
+
+  /* AI DEMAND SECTION */
+  .demand-section {
+    position: relative;
+    z-index: 2;
+    padding: 100px 40px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .demand-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+    align-items: start;
+  }
+
+  .demand-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    padding: 40px;
+  }
+
+  .demand-bar {
+    margin-bottom: 20px;
+  }
+
+  .demand-bar-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  .demand-bar-label {
+    font-size: 13px;
+    color: var(--white);
+    font-weight: 600;
+  }
+
+  .demand-bar-pct {
+    font-family: 'Orbitron', monospace;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .demand-bar-track {
+    height: 6px;
+    background: rgba(255,255,255,0.05);
+    overflow: hidden;
+  }
+
+  .demand-bar-fill {
+    height: 100%;
+    border-radius: 0;
+    transition: width 1.5s cubic-bezier(0.25, 1, 0.5, 1);
+  }
+
+  .demand-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  /* SUBMIT FORM */
+  .submit-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .form-input, .form-textarea {
+    background: rgba(0,212,255,0.03);
+    border: 1px solid var(--border);
+    color: var(--white);
+    padding: 14px 18px;
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+    resize: none;
+  }
+
+  .form-input:focus, .form-textarea:focus {
+    border-color: rgba(0,212,255,0.5);
+  }
+
+  .form-input::placeholder, .form-textarea::placeholder {
+    color: var(--muted);
+  }
+
+  .form-btn {
+    background: linear-gradient(90deg, var(--cyan), var(--electric));
+    border: none;
+    color: var(--navy);
+    padding: 16px 32px;
+    font-family: 'Orbitron', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    cursor: none;
+    transition: opacity 0.2s, transform 0.2s;
+  }
+
+  .form-btn:hover {
+    opacity: 0.9;
+    transform: translateY(-2px);
+  }
+
+  /* SCAM SECTION */
+  .scam-section {
+    position: relative;
+    z-index: 2;
+    padding: 100px 40px;
+    background: rgba(255,51,85,0.03);
+    border-top: 1px solid rgba(255,51,85,0.1);
+    border-bottom: 1px solid rgba(255,51,85,0.1);
+  }
+
+  .scam-inner {
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .report-agencies {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-top: 40px;
+  }
+
+  .agency-card {
+    background: rgba(255,51,85,0.05);
+    border: 1px solid rgba(255,51,85,0.2);
+    padding: 24px;
+    transition: border-color 0.2s, transform 0.2s;
+    cursor: none;
+    text-decoration: none;
+    color: inherit;
+    display: block;
+  }
+
+  .agency-card:hover {
+    border-color: rgba(255,51,85,0.5);
+    transform: translateY(-4px);
+  }
+
+  .agency-name {
+    font-family: 'Orbitron', monospace;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--red);
+    margin-bottom: 6px;
+  }
+
+  .agency-desc {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  .agency-link {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: rgba(255,51,85,0.6);
+    margin-top: 10px;
+    display: block;
+  }
+
+  /* FOOTER */
+  footer {
+    position: relative;
+    z-index: 2;
+    padding: 60px 40px 40px;
+    border-top: 1px solid var(--border);
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .footer-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+    gap: 48px;
+    margin-bottom: 48px;
+  }
+
+  .footer-brand {
+    font-family: 'Orbitron', monospace;
+    font-size: 18px;
+    font-weight: 900;
+    color: var(--cyan);
+    margin-bottom: 16px;
+  }
+
+  .footer-tagline {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.7;
+    max-width: 280px;
+  }
+
+  .footer-col h4 {
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    color: var(--cyan);
+    letter-spacing: 2px;
+    margin-bottom: 20px;
+  }
+
+  .footer-col ul {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .footer-col a {
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 13px;
+    transition: color 0.2s;
+  }
+
+  .footer-col a:hover { color: var(--white); }
+
+  .footer-bottom {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 32px;
+    border-top: 1px solid var(--border);
+  }
+
+  .footer-copy {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .footer-vault-link {
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    color: var(--cyan);
+    text-decoration: none;
+    letter-spacing: 2px;
+    border: 1px solid var(--border);
+    padding: 8px 16px;
+    transition: all 0.2s;
+  }
+
+  .footer-vault-link:hover {
+    border-color: var(--cyan);
+    background: rgba(0,212,255,0.05);
+  }
+
+  /* FAUCET MINI */
+  .faucet-widget {
+    background: rgba(0,255,136,0.04);
+    border: 1px solid rgba(0,255,136,0.15);
+    padding: 32px;
+    margin-top: 40px;
+  }
+
+  .faucet-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 16px;
+    color: var(--green);
+    margin-bottom: 8px;
+  }
+
+  .faucet-sub {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 20px;
+  }
+
+  .faucet-row {
+    display: flex;
+    gap: 12px;
+  }
+
+  .faucet-input {
+    flex: 1;
+    background: rgba(0,255,136,0.03);
+    border: 1px solid rgba(0,255,136,0.15);
+    color: var(--white);
+    padding: 12px 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    outline: none;
+  }
+
+  .faucet-btn {
+    background: rgba(0,255,136,0.15);
+    border: 1px solid var(--green);
+    color: var(--green);
+    padding: 12px 24px;
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    cursor: none;
+    transition: all 0.2s;
+  }
+
+  .faucet-btn:hover {
+    background: rgba(0,255,136,0.25);
+  }
+</style>
+</head>
+<body>
+
+<div class="cursor" id="cursor"></div>
+<div class="cursor-ring" id="cursorRing"></div>
+<div class="grid-bg"></div>
+<div class="orb orb1"></div>
+<div class="orb orb2"></div>
+<div class="orb orb3"></div>
+
+<!-- NAV -->
+<nav>
+  <a href="#" class="nav-logo">
+    <div class="shield">⬡</div>
+    ETHOSIFI HUB
+  </a>
+  <ul class="nav-links">
+    <li><a href="#hub">Community</a></li>
+    <li><a href="#scam">Scam Report</a></li>
+    <li><a href="#builders">Builders</a></li>
+    <li><a href="#demand">Demands</a></li>
+    <li><a href="#investors">Investors</a></li>
+  </ul>
+  <a href="https://ethosifi.com" class="nav-cta">LAUNCH VAULT →</a>
+</nav>
+
+<!-- TICKER -->
+<div class="ticker-bar" style="margin-top:64px">
+  <div class="ticker-track" id="ticker">
+    <span class="ticker-item">BTC <span class="up">▲ $84,220</span></span>
+    <span class="ticker-item">ETH <span class="up">▲ $3,840</span></span>
+    <span class="ticker-item">SOL <span class="down">▼ $152.40</span></span>
+    <span class="ticker-item">MATIC <span class="up">▲ $0.92</span></span>
+    <span class="ticker-item">LINK <span class="up">▲ $18.44</span></span>
+    <span class="ticker-item">ARB <span class="down">▼ $1.12</span></span>
+    <span class="ticker-item">OP <span class="up">▲ $2.88</span></span>
+    <span class="ticker-item">AVAX <span class="up">▲ $39.20</span></span>
+    <span class="ticker-item">$ETHOS <span class="up">▲ TESTNET</span></span>
+    <!-- duplicate for seamless loop -->
+    <span class="ticker-item">BTC <span class="up">▲ $84,220</span></span>
+    <span class="ticker-item">ETH <span class="up">▲ $3,840</span></span>
+    <span class="ticker-item">SOL <span class="down">▼ $152.40</span></span>
+    <span class="ticker-item">MATIC <span class="up">▲ $0.92</span></span>
+    <span class="ticker-item">LINK <span class="up">▲ $18.44</span></span>
+    <span class="ticker-item">ARB <span class="down">▼ $1.12</span></span>
+    <span class="ticker-item">OP <span class="up">▲ $2.88</span></span>
+    <span class="ticker-item">AVAX <span class="up">▲ $39.20</span></span>
+    <span class="ticker-item">$ETHOS <span class="up">▲ TESTNET</span></span>
+  </div>
+</div>
+
+<!-- ALERT BANNER -->
+<div class="alert-banner">
+  <div class="alert-dot"></div>
+  <span class="alert-label">SECURITY ALERT</span>
+  <span class="alert-text">Active phishing campaign targeting MetaMask users — fake "MetaMask Pro" browser extension stealing seed phrases. Do not install. Report at #scam-reports.</span>
+</div>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-tag">// ethosifi.xyz — security-first crypto community</div>
+  <h1 class="hero-title">
+    <span class="line1">THE CRYPTO HUB</span>
+    <span class="line2">BUILT TO PROTECT YOU</span>
+  </h1>
+  <p class="hero-sub">News. Security alerts. Scam reporting. Builders. Investors. Community. The only crypto hub that puts safety first.</p>
+  <div class="hero-stats">
+    <div class="stat">
+      <span class="stat-val">$3.5B</span>
+      <span class="stat-label">Stolen in 2025</span>
+    </div>
+    <div class="stat">
+      <span class="stat-val">580M</span>
+      <span class="stat-label">Crypto Users</span>
+    </div>
+    <div class="stat">
+      <span class="stat-val">13</span>
+      <span class="stat-label">Security Modules</span>
+    </div>
+    <div class="stat">
+      <span class="stat-val">100%</span>
+      <span class="stat-label">On-Chain Security</span>
+    </div>
+  </div>
+  <div class="hero-scroll">
+    <span>Explore</span>
+    <div class="scroll-line"></div>
+  </div>
+</div>
+
+<!-- HUB TILES -->
+<section class="hub-section" id="hub">
+  <div class="section-label">// navigate the hub</div>
+  <h2 class="section-title">Everything You Need. One Hub.</h2>
+  <p class="section-sub">From live security alerts to investor directories — EthosiFi Hub is the command center for the security-first crypto community.</p>
+
+  <div class="tiles-grid">
+
+    <!-- Tile 1 - News (large) -->
+    <a href="news.html" class="tile">
+      <div class="tile-accent" style="background:linear-gradient(90deg,var(--cyan),var(--electric))"></div>
+      <div class="tile-glow" style="background:var(--cyan)"></div>
+      <span class="tile-num">01</span>
+      <span class="tile-icon">📡</span>
+      <span class="tile-tag" style="color:var(--cyan)">Live Feed</span>
+      <div class="tile-title">Crypto News &amp; Security Alerts</div>
+      <div class="tile-desc">Real-time curated news focused on hacks, breaches, scams, and protocol security. Be the first to know.</div>
+      <div class="tile-arrow">→</div>
+    </a>
+
+    <!-- Tile 2 - Scam Report (large) -->
+    <a href="scam-report.html" class="tile">
+      <div class="tile-accent" style="background:linear-gradient(90deg,var(--red),#ff6633)"></div>
+      <div class="tile-glow" style="background:var(--red)"></div>
+      <span class="tile-num">02</span>
+      <span class="tile-icon">🚨</span>
+      <span class="tile-tag" style="color:var(--red)">Protect Yourself</span>
+      <div class="tile-title">Scam Reporting Center</div>
+      <div class="tile-desc">Submit scam reports with wallet addresses and tx hashes. Direct links to FBI IC3, FTC, SEC, Europol and more.</div>
+      <div class="tile-arrow">→</div>
+    </a>
+
+    <!-- Tile 3 - Chat -->
+    <a href="chat.html" class="tile">
+      <div class="tile-accent" style="background:linear-gradient(90deg,var(--purple),var(--electric))"></div>
+      <div class="tile-glow" style="background:var(--purple)"></div>
+      <span class="tile-num">03</span>
+      <span class="tile-icon">💬</span>
+      <span class="tile-tag" style="color:var(--purple)">Community</span>
+      <div class="tile-title">Live Community Chat</div>
+      <div class="tile-desc">Real-time rooms: General, Security, DeFi, Builders, Support.</div>
+      <div class="tile-arrow">→</div>
+    </a>
+
+    <!-- Tile 4 - Faucet -->
+    <a href="faucet.html" class="tile">
+      <div class="tile-accent" style="background:linear-gradient(90deg,var(--green),#00ccff)"></div>
+      <div class="tile-glow" style="background:var(--green)"></div>
+      <span class="tile-num">04</span>
+      <span class="tile-icon">🚰</span>
+      <span class="tile-tag" style="color:var(--green)">Testnet</span>
+      <div class="tile-title">Sepolia Faucet</div>
+      <div class="tile-desc">Request testnet ETH for EthosiFi Vault testing. One-click, wallet-connected drip.</div>
+      <div class="tile-arrow">→</div>
+    </a>
+
+    <!-- Tile 5 - Builders -->
+    <a href="builders.html" class="tile">
+      <div class="tile-accent" style="background:linear-gradient(90deg,var(--gold),#ff9900)"></div>
+      <div class="tile-glow" style="background:var(--gold)"></div>
+      <span class="tile-num">05</span>
+      <span class="tile-icon">🏗️</span>
+      <span class="tile-tag" style="color:var(--gold)">Builders Board</span>
+      <div class="tile-title">Founders &amp; Builders</div>
+      <div class="tile-desc">Post your project, get upvotes, apply for ecosystem grants, find co-founders.</div>
+      <div class="tile-arrow">→</div>
+    </a>
+
+    <!-- Tile 6 - Investors -->
+    <a href="investors.html" class="tile">
+      <div class="tile-accent" style="background:linear-gradient(90deg,#00ffea,var(--cyan))"></div>
+      <div class="tile-glow" style="background:#00ffea"></div>
+      <span class="tile-num">06</span>
+      <span class="tile-icon">💰</span>
+      <span class="tile-tag" style="color:#00ffea)">Capital</span>
+      <div class="tile-title">Investor Directory</div>
+      <div class="tile-desc">Curated list of crypto VCs — focus areas, check sizes, contact info. Updated monthly.</div>
+      <div class="tile-arrow">→</div>
+    </a>
+
+    <!-- Tile 7 - AI Demand (large) -->
+    <a href="demand.html" class="tile">
+      <div class="tile-accent" style="background:linear-gradient(90deg,var(--electric),var(--purple))"></div>
+      <div class="tile-glow" style="background:var(--electric)"></div>
+      <span class="tile-num">07</span>
+      <span class="tile-icon">🤖</span>
+      <span class="tile-tag" style="color:var(--electric)">AI-Powered</span>
+      <div class="tile-title">Feature Demand Board</div>
+      <div class="tile-desc">Submit what you want built. Our AI agent crunches all requests into a ranked demand list with viability scores. The community shapes the roadmap.</div>
+      <div class="tile-arrow">→</div>
+    </a>
+
+    <!-- Tile 8 - Academy (large) -->
+    <a href="academy.html" class="tile">
+      <div class="tile-accent" style="background:linear-gradient(90deg,#ff9900,var(--gold))"></div>
+      <div class="tile-glow" style="background:#ff9900"></div>
+      <span class="tile-num">08</span>
+      <span class="tile-icon">🎓</span>
+      <span class="tile-tag" style="color:#ff9900">Free Education</span>
+      <div class="tile-title">Security Academy</div>
+      <div class="tile-desc">Free guides on avoiding scams, understanding wallets, deepfake awareness, and seed phrase security. The knowledge layer for 580M crypto users.</div>
+      <div class="tile-arrow">→</div>
+    </a>
+
+    <!-- Tile 9 - Protocol Status -->
+    <a href="status.html" class="tile">
+      <div class="tile-accent" style="background:linear-gradient(90deg,var(--green),var(--cyan))"></div>
+      <div class="tile-glow" style="background:var(--green)"></div>
+      <span class="tile-num">09</span>
+      <span class="tile-icon">📊</span>
+      <span class="tile-tag" style="color:var(--green)">Live</span>
+      <div class="tile-title">Protocol Status</div>
+      <div class="tile-desc">Live contract status, vault count, $ETHOS burned, transaction stats on Sepolia.</div>
+      <div class="tile-arrow">→</div>
+    </a>
+
+    <!-- Tile 10 - Governance -->
+    <a href="governance.html" class="tile">
+      <div class="tile-accent" style="background:linear-gradient(90deg,var(--purple),var(--red))"></div>
+      <div class="tile-glow" style="background:var(--purple)"></div>
+      <span class="tile-num">10</span>
+      <span class="tile-icon">🗳️</span>
+      <span class="tile-tag" style="color:var(--purple)">DAO</span>
+      <div class="tile-title">$ETHOS Governance</div>
+      <div class="tile-desc">Vote on protocol proposals. $ETHOS holders shape the future of EthosiFi.</div>
+      <div class="tile-arrow">→</div>
+    </a>
+
+  </div>
+</section>
+
+<!-- FAUCET WIDGET -->
+<section style="position:relative;z-index:2;padding:0 40px 80px;max-width:1400px;margin:0 auto">
+  <div class="faucet-widget">
+    <div class="faucet-title">🚰 Sepolia Testnet Faucet</div>
+    <div class="faucet-sub">Testing EthosiFi Vault? Get free Sepolia ETH. One request per wallet per 24 hours.</div>
+    <div class="faucet-row">
+      <input class="faucet-input" placeholder="0x... Enter your wallet address" />
+      <button class="faucet-btn" onclick="this.textContent='SENT ✓';this.style.background='rgba(0,255,136,0.3)'">REQUEST ETH</button>
+    </div>
+  </div>
+</section>
+
+<!-- AI DEMAND SECTION -->
+<section class="demand-section" id="demand">
+  <div class="section-label">// ai-powered feature tracking</div>
+  <h2 class="section-title">Community Feature Demands</h2>
+  <p class="section-sub">The AI agent processes every request and ranks them by demand percentage and viability score. You shape the roadmap.</p>
+
+  <div class="demand-layout">
+    <div class="demand-card">
+      <div style="font-family:'Orbitron',monospace;font-size:13px;color:var(--cyan);letter-spacing:2px;margin-bottom:28px">LIVE DEMAND RANKINGS</div>
+
+      <div class="demand-bar">
+        <div class="demand-bar-header"><span class="demand-bar-label">Mobile App (iOS & Android)</span><span class="demand-bar-pct" style="color:var(--cyan)">87%</span></div>
+        <div class="demand-bar-track"><div class="demand-bar-fill" style="width:87%;background:linear-gradient(90deg,var(--cyan),var(--electric))"></div></div>
+        <div class="demand-meta">2,841 requests · Viability: HIGH ✓</div>
+      </div>
+
+      <div class="demand-bar">
+        <div class="demand-bar-header"><span class="demand-bar-label">Hardware Wallet Integration</span><span class="demand-bar-pct" style="color:var(--electric)">74%</span></div>
+        <div class="demand-bar-track"><div class="demand-bar-fill" style="width:74%;background:linear-gradient(90deg,var(--electric),var(--purple))"></div></div>
+        <div class="demand-meta">2,418 requests · Viability: HIGH ✓</div>
+      </div>
+
+      <div class="demand-bar">
+        <div class="demand-bar-header"><span class="demand-bar-label">Multi-Chain Support</span><span class="demand-bar-pct" style="color:var(--purple)">68%</span></div>
+        <div class="demand-bar-track"><div class="demand-bar-fill" style="width:68%;background:linear-gradient(90deg,var(--purple),#cc44ff)"></div></div>
+        <div class="demand-meta">2,221 requests · Viability: MEDIUM →</div>
+      </div>
+
+      <div class="demand-bar">
+        <div class="demand-bar-header"><span class="demand-bar-label">DeFi Portfolio Tracker</span><span class="demand-bar-pct" style="color:var(--gold)">52%</span></div>
+        <div class="demand-bar-track"><div class="demand-bar-fill" style="width:52%;background:linear-gradient(90deg,var(--gold),#ff9900)"></div></div>
+        <div class="demand-meta">1,699 requests · Viability: HIGH ✓</div>
+      </div>
+
+      <div class="demand-bar">
+        <div class="demand-bar-header"><span class="demand-bar-label">AI Transaction Explainer</span><span class="demand-bar-pct" style="color:var(--green)">41%</span></div>
+        <div class="demand-bar-track"><div class="demand-bar-fill" style="width:41%;background:linear-gradient(90deg,var(--green),var(--cyan))"></div></div>
+        <div class="demand-meta">1,340 requests · Viability: HIGH ✓</div>
+      </div>
+
+      <div style="margin-top:24px;padding-top:24px;border-top:1px solid var(--border);font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted)">
+        Last processed: 14 Mar 2026 · 9,843 total requests analyzed
+      </div>
+    </div>
+
+    <div class="demand-card">
+      <div style="font-family:'Orbitron',monospace;font-size:13px;color:var(--cyan);letter-spacing:2px;margin-bottom:28px">SUBMIT A FEATURE REQUEST</div>
+      <div class="submit-form">
+        <input class="form-input" placeholder="Feature title" />
+        <textarea class="form-textarea" rows="4" placeholder="Describe what you want built and why it matters to you..."></textarea>
+        <select class="form-input" style="cursor:none">
+          <option value="" disabled selected>Category</option>
+          <option>Security</option>
+          <option>UX / Accessibility</option>
+          <option>DeFi Integration</option>
+          <option>Mobile</option>
+          <option>Token / Governance</option>
+          <option>Other</option>
+        </select>
+        <button class="form-btn" onclick="this.textContent='SUBMITTED ✓'">SUBMIT TO AI AGENT</button>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted)">AI agent processes submissions every 24 hours and updates the demand rankings.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SCAM REPORTING -->
+<section class="scam-section" id="scam">
+  <div class="scam-inner">
+    <div class="section-label" style="color:var(--red)">// report crypto crime</div>
+    <h2 class="section-title">Scam Reporting Center</h2>
+    <p class="section-sub">Submit scam reports to the EthosiFi database and report directly to law enforcement agencies worldwide.</p>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:start">
+      <div class="demand-card" style="border-color:rgba(255,51,85,0.2)">
+        <div style="font-family:'Orbitron',monospace;font-size:13px;color:var(--red);letter-spacing:2px;margin-bottom:28px">REPORT A SCAM</div>
+        <div class="submit-form">
+          <input class="form-input" placeholder="Scammer wallet address (0x...)" style="border-color:rgba(255,51,85,0.2)" />
+          <input class="form-input" placeholder="Transaction hash (optional)" style="border-color:rgba(255,51,85,0.2)" />
+          <select class="form-input" style="cursor:none;border-color:rgba(255,51,85,0.2)">
+            <option value="" disabled selected>Scam Type</option>
+            <option>Phishing</option>
+            <option>Rug Pull</option>
+            <option>Fake Exchange</option>
+            <option>Deepfake Impersonation</option>
+            <option>Honeypot Contract</option>
+            <option>Romance Scam / Pig Butchering</option>
+            <option>Other</option>
+          </select>
+          <textarea class="form-textarea" rows="3" placeholder="Describe what happened..." style="border-color:rgba(255,51,85,0.2)"></textarea>
+          <button class="form-btn" style="background:linear-gradient(90deg,var(--red),#ff6633)" onclick="this.textContent='REPORTED ✓'">SUBMIT REPORT</button>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-family:'Orbitron',monospace;font-size:13px;color:var(--red);letter-spacing:2px;margin-bottom:20px">REPORT TO AUTHORITIES</div>
+        <div class="report-agencies">
+          <a href="https://ic3.gov" target="_blank" class="agency-card">
+            <div class="agency-name">FBI IC3</div>
+            <div class="agency-desc">Internet Crime Complaint Center — US federal crypto crime reporting</div>
+            <span class="agency-link">ic3.gov →</span>
+          </a>
+          <a href="https://reportfraud.ftc.gov" target="_blank" class="agency-card">
+            <div class="agency-name">FTC</div>
+            <div class="agency-desc">Federal Trade Commission — US consumer fraud & crypto scams</div>
+            <span class="agency-link">reportfraud.ftc.gov →</span>
+          </a>
+          <a href="https://sec.gov/tcr" target="_blank" class="agency-card">
+            <div class="agency-name">SEC</div>
+            <div class="agency-desc">Securities & Exchange Commission — investment fraud & token scams</div>
+            <span class="agency-link">sec.gov/tcr →</span>
+          </a>
+          <a href="https://europol.europa.eu/report-a-crime" target="_blank" class="agency-card">
+            <div class="agency-name">Europol</div>
+            <div class="agency-desc">European Union cybercrime & crypto fraud reporting</div>
+            <span class="agency-link">europol.europa.eu →</span>
+          </a>
+          <a href="https://actionfraud.police.uk" target="_blank" class="agency-card">
+            <div class="agency-name">Action Fraud</div>
+            <div class="agency-desc">UK national fraud & cybercrime reporting centre</div>
+            <span class="agency-link">actionfraud.police.uk →</span>
+          </a>
+          <a href="https://asic.gov.au/report" target="_blank" class="agency-card">
+            <div class="agency-name">ASIC</div>
+            <div class="agency-desc">Australian Securities & Investments Commission — financial scams</div>
+            <span class="agency-link">asic.gov.au →</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-grid">
+    <div>
+      <div class="footer-brand">⬡ ETHOSIFI HUB</div>
+      <div class="footer-tagline">The security-first crypto community. Protecting 580 million users from $3.5B in annual theft. Built on the EthosiFi Vault protocol.</div>
+    </div>
+    <div class="footer-col">
+      <h4>Community</h4>
+      <ul>
+        <li><a href="news.html">Security News</a></li>
+        <li><a href="chat.html">Live Chat</a></li>
+        <li><a href="scam-report.html">Scam Reports</a></li>
+        <li><a href="academy.html">Academy</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Builders</h4>
+      <ul>
+        <li><a href="builders.html">Post a Project</a></li>
+        <li><a href="investors.html">Investor List</a></li>
+        <li><a href="demand.html">Feature Demands</a></li>
+        <li><a href="governance.html">Governance</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Protocol</h4>
+      <ul>
+        <li><a href="https://ethosifi.com">EthosiFi Vault</a></li>
+        <li><a href="faucet.html">Testnet Faucet</a></li>
+        <li><a href="status.html">Protocol Status</a></li>
+        <li><a href="mailto:founder@ethosifi.com">Contact</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <div class="footer-copy">© 2026 EthosiFi · BSL-1.1 License · founder@ethosifi.com</div>
+    <a href="https://ethosifi.com" class="footer-vault-link">LAUNCH THE VAULT →</a>
+  </div>
+</footer>
+
+<script>
+  // Custom cursor
+  const cursor = document.getElementById('cursor');
+  const ring = document.getElementById('cursorRing');
+  let mx = 0, my = 0, rx = 0, ry = 0;
+
+  document.addEventListener('mousemove', e => {
+    mx = e.clientX; my = e.clientY;
+    cursor.style.left = mx + 'px';
+    cursor.style.top = my + 'px';
+  });
+
+  function animRing() {
+    rx += (mx - rx) * 0.12;
+    ry += (my - ry) * 0.12;
+    ring.style.left = rx + 'px';
+    ring.style.top = ry + 'px';
+    requestAnimationFrame(animRing);
+  }
+  animRing();
+
+  document.querySelectorAll('a, button, input, select, textarea').forEach(el => {
+    el.addEventListener('mouseenter', () => {
+      cursor.style.width = '20px';
+      cursor.style.height = '20px';
+      ring.style.width = '56px';
+      ring.style.height = '56px';
+    });
+    el.addEventListener('mouseleave', () => {
+      cursor.style.width = '12px';
+      cursor.style.height = '12px';
+      ring.style.width = '36px';
+      ring.style.height = '36px';
+    });
+  });
+
+  // Scroll reveal tiles
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach((e, i) => {
+      if (e.isIntersecting) {
+        setTimeout(() => {
+          e.target.style.opacity = '1';
+          e.target.style.transform = e.target.style.transform.replace('translateY(40px)', 'translateY(0)');
+        }, i * 80);
+        observer.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.1 });
+
+  document.querySelectorAll('.tile').forEach(tile => {
+    tile.style.opacity = '0';
+    tile.style.transform = 'translateY(40px)';
+    tile.style.transition = 'opacity 0.6s ease, transform 0.6s ease, border-color 0.3s, box-shadow 0.3s';
+    observer.observe(tile);
+  });
+
+  // Live clock in ticker
+  function updateTime() {
+    const now = new Date();
+    const time = now.toUTCString().split(' ')[4] + ' UTC';
+  }
+  setInterval(updateTime, 1000);
+</script>
+</body>
+</html>
