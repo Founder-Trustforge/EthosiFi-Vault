@@ -124,10 +124,11 @@ contract EthosToken {
     function transfer(address to, uint256 amount) external returns (bool) {
         if (to == address(0)) revert ZeroAddress();
         if (balanceOf[msg.sender] < amount) revert InsufficientBalance();
-        unchecked {
+    }
+        unchecked{
             balanceOf[msg.sender] -= amount;
             balanceOf[to] += amount;
-        }
+        
         emit Transfer(msg.sender, to, amount);
         return true;
     }
@@ -142,11 +143,11 @@ contract EthosToken {
         if (to == address(0)) revert ZeroAddress();
         if (balanceOf[from] < amount) revert InsufficientBalance();
         if (allowance[from][msg.sender] < amount) revert InsufficientAllowance();
+    }
         unchecked {
             balanceOf[from] -= amount;
             allowance[from][msg.sender] -= amount;
             balanceOf[to] += amount;
-        }
         emit Transfer(from, to, amount);
         return true;
     }
@@ -163,13 +164,12 @@ contract EthosToken {
         if (!authorizedBurners[msg.sender]) revert NotAuthorizedBurner();
         if (amount == 0) revert ZeroAmount();
         if (balanceOf[from] < amount) revert InsufficientBalance();
+    }
 
         unchecked {
             balanceOf[from] -= amount;
             totalSupply -= amount;
             totalBurned += amount;
-        }
-
         emit Transfer(from, address(0), amount);
         emit Burn(msg.sender, from, amount, totalSupply);
     }
@@ -180,12 +180,11 @@ contract EthosToken {
     function burn(uint256 amount) external {
         if (amount == 0) revert ZeroAmount();
         if (balanceOf[msg.sender] < amount) revert InsufficientBalance();
-
+    }
         unchecked {
             balanceOf[msg.sender] -= amount;
             totalSupply -= amount;
             totalBurned += amount;
-        }
 
         emit Transfer(msg.sender, address(0), amount);
         emit Burn(msg.sender, msg.sender, amount, totalSupply);
@@ -198,12 +197,11 @@ contract EthosToken {
     function burnSubscriptionFee(address subscriber) external {
         if (!authorizedBurners[msg.sender]) revert NotAuthorizedBurner();
         if (balanceOf[subscriber] < SUBSCRIPTION_BURN) revert InsufficientBalance();
-
+    }
         unchecked {
             balanceOf[subscriber] -= SUBSCRIPTION_BURN;
             totalSupply -= SUBSCRIPTION_BURN;
             totalBurned += SUBSCRIPTION_BURN;
-        }
 
         emit Transfer(subscriber, address(0), SUBSCRIPTION_BURN);
         emit Burn(msg.sender, subscriber, SUBSCRIPTION_BURN, totalSupply);
