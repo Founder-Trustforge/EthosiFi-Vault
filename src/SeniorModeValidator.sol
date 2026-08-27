@@ -220,7 +220,8 @@ contract SeniorModeValidator is IValidator {
     // Spend Tracking
     // ─────────────────────────────────────────────
 
-    function recordSpend(address account, uint256 amount) external {
+    // [CRIT-2 FIXED] Internal only — was callable by anyone to exhaust daily limits
+    function recordSpend(address account, uint256 amount) internal {
         // Called by VaultFactory after execution
         DailySpend storage spend = dailySpend[account];
         uint256 today = block.timestamp / 1 days;

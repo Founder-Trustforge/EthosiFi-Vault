@@ -222,12 +222,13 @@ contract PoisonedAddressProtection is IValidator {
      * @dev In production: controlled by EthosiFi governance multisig.
      *      Fed by Chainalysis, on-chain indexers, and community reports.
      */
-    function flagPoisonedFingerprint(bytes8 fingerprint) external {
+    // [CRIT-3 FIXED] onlyOwner — previously callable by anyone
+    function flagPoisonedFingerprint(bytes8 fingerprint) external onlyOwner {
         // Production: onlyOwner or governance
         knownPoisonPrefixSuffix[fingerprint] = true;
     }
 
-    function unflagFingerprint(bytes8 fingerprint) external {
+    function unflagFingerprint(bytes8 fingerprint) external onlyOwner {
         // Production: onlyOwner or governance
         knownPoisonPrefixSuffix[fingerprint] = false;
     }

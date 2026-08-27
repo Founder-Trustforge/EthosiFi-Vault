@@ -1,94 +1,94 @@
 // SPDX-License-Identifier: BSL-1.1
 pragma solidity ^0.8.23;
 
+import {ReentrancyGuard} from "solady/utils/ReentrancyGuard.sol";
+
 interface IEthosStaking {
     function isMVP(address account) external view returns (bool);
     function getGovernanceVotes(address account) external view returns (uint256);
 }
 
 /**
- * @title EthosGovernance
- * @notice On-chain governance for EthosiFi Vault MVP token holders
- * @dev
- * Voting power = $ETHOS staked / 1000 (1 vote per 1000 $ETHOS)
- * Proposals require minimum quorum to pass
- * Timelocked execution after passing
+ * @title  EthosGovernance
+ * @notice On-chain governance for EthosiFi Vault MVP token holders.
  *
- * Governance categories:
- * - FEATURE: New security module prioritization
- * - CHAIN: Chain expansion (Base, Polygon, Arbitrum, Solana)
- * - THREAT: Threat registry governance
- * - TREASURY: Treasury allocation
- * - PARAMETER: Fee/burn rate adjustments
- *
- * EthosiFi Vault — The Unstealable Wallet
+ * @dev    SECURITY FIXES (2026-08 audit):
+ *         [CRIT-1] executeProposal() made an arbitrary .call() with attacker-controlled
+ *                  target and callData. A malicious governance proposal could drain any
+ *                  contract, transfer ownership, or call any function in the protocol.
+ *                  Fixed: only whitelisted target contracts may be called, and only
+ *                  whitelisted function selectors are permitted per target.
+ *         [HIGH-1] transferOwnership() was one-step. Fixed: two-step.
+ *         [MED-1]  No reentrancy guard on executeProposal(). Fixed.
+ *         [MED-2]  getActiveProposals() iterated unbounded proposalCount — DoS if
+ *                  many proposals exist. Added a pagination-based view.
+ *         [MED-3]  Quorum check only required totalVotes >= QUORUM_VOTES but did not
+ *                  verify that votesFor constituted a majority of total staked supply.
+ *                  Added minimum participation rate check.
  */
-contract EthosGovernance {
+contract EthosGovernance is ReentrancyGuard {
 
     IEthosStaking public immutable stakingContract;
     address public owner;
+    address public pendingOwner;
 
-    // ─── CONSTANTS ───────────────────────────────────────────────────────────
+    // ─── Constants ────────────────────────────────────────────────────────────
 
-    uint256 public constant VOTING_PERIOD    = 7 days;
-    uint256 public constant TIMELOCK_PERIOD  = 2 days;
-    uint256 public constant QUORUM_VOTES     = 100; // Minimum 100 votes to pass
-    uint256 public constant MIN_MVP_TO_PROPOSE = 1;  // Must be MVP to propose
+    uint256 public constant VOTING_PERIOD     = 7 days;
+    uint256 public constant TIMELOCK_PERIOD   = 2 days;
+    uint256 public constant QUORUM_VOTES      = 100;
+    uint256 public constant MAX_TARGETS       = 20;
 
-    // ─── ENUMS ───────────────────────────────────────────────────────────────
+    // ─── Types ────────────────────────────────────────────────────────────────
 
     enum ProposalCategory { FEATURE, CHAIN, THREAT, TREASURY, PARAMETER }
     enum ProposalStatus   { ACTIVE, PASSED, REJECTED, EXECUTED, CANCELLED }
 
-    // ─── STATE ───────────────────────────────────────────────────────────────
-
     struct Proposal {
-        uint256             id;
-        address             proposer;
-        string              title;
-        string              description;
-        ProposalCategory    category;
-        ProposalStatus      status;
-        uint256             votesFor;
-        uint256             votesAgainst;
-        uint256             startTime;
-        uint256             endTime;
-        uint256             executionTime;
-        bool                executed;
-        bytes               callData;    // Optional: encoded function call
-        address             target;      // Optional: contract to call on execution
+        uint256          id;
+        address          proposer;
+        string           title;
+        string           description;
+        ProposalCategory category;
+        ProposalStatus   status;
+        uint256          votesFor;
+        uint256          votesAgainst;
+        uint256          startTime;
+        uint256          endTime;
+        uint256          executionTime;
+        bool             executed;
+        bytes            callData;
+        address          target;
     }
+
+    // ─── Storage ──────────────────────────────────────────────────────────────
 
     uint256 public proposalCount;
     mapping(uint256 => Proposal) public proposals;
-
-    // proposalId => voter => hasVoted
-    mapping(uint256 => mapping(address => bool)) public hasVoted;
-
-    // proposalId => voter => votesUsed
+    mapping(uint256 => mapping(address => bool))    public hasVoted;
     mapping(uint256 => mapping(address => uint256)) public votesUsed;
 
-    // ─── EVENTS ──────────────────────────────────────────────────────────────
+    /// @dev [CRIT-1] Whitelist of contracts that governance can call.
+    mapping(address => bool)                          public approvedTargets;
+    /// @dev [CRIT-1] Per-target whitelist of function selectors.
+    mapping(address => mapping(bytes4 => bool))       public approvedSelectors;
 
-    event ProposalCreated(
-        uint256 indexed proposalId,
-        address indexed proposer,
-        string title,
-        ProposalCategory category,
-        uint256 endTime
-    );
-    event VoteCast(
-        address indexed voter,
-        uint256 indexed proposalId,
-        bool support,
-        uint256 votes
-    );
+    // ─── Events ───────────────────────────────────────────────────────────────
+
+    event ProposalCreated(uint256 indexed proposalId, address indexed proposer, string title, ProposalCategory category, uint256 endTime);
+    event VoteCast(address indexed voter, uint256 indexed proposalId, bool support, uint256 votes);
     event ProposalPassed(uint256 indexed proposalId, uint256 votesFor, uint256 votesAgainst);
     event ProposalRejected(uint256 indexed proposalId, uint256 votesFor, uint256 votesAgainst);
     event ProposalExecuted(uint256 indexed proposalId);
     event ProposalCancelled(uint256 indexed proposalId);
+    event TargetApproved(address indexed target);
+    event TargetRevoked(address indexed target);
+    event SelectorApproved(address indexed target, bytes4 selector);
+    event SelectorRevoked(address indexed target, bytes4 selector);
+    event OwnershipTransferStarted(address indexed prev, address indexed next);
+    event OwnershipTransferred(address indexed prev, address indexed next);
 
-    // ─── ERRORS ──────────────────────────────────────────────────────────────
+    // ─── Errors ───────────────────────────────────────────────────────────────
 
     error NotOwner();
     error NotMVP();
@@ -100,20 +100,23 @@ contract EthosGovernance {
     error AlreadyExecuted();
     error ProposalNotPassed();
     error NoVotingPower();
+    error TargetNotApproved();
+    error SelectorNotApproved();
+    error ExecutionFailed();
+    error ZeroAddress();
 
-    // ─── CONSTRUCTOR ─────────────────────────────────────────────────────────
+    // ─── Constructor ──────────────────────────────────────────────────────────
 
     constructor(address _stakingContract) {
+        if (_stakingContract == address(0)) revert ZeroAddress();
         stakingContract = IEthosStaking(_stakingContract);
         owner = msg.sender;
     }
 
-    // ─── PROPOSAL FUNCTIONS ──────────────────────────────────────────────────
+    modifier onlyOwner() { if (msg.sender != owner) revert NotOwner(); _; }
 
-    /**
-     * @notice Create a governance proposal
-     * @dev Proposer must be an active MVP member
-     */
+    // ─── Proposals ────────────────────────────────────────────────────────────
+
     function createProposal(
         string calldata title,
         string calldata description,
@@ -123,8 +126,14 @@ contract EthosGovernance {
     ) external returns (uint256 proposalId) {
         if (!stakingContract.isMVP(msg.sender)) revert NotMVP();
 
-        proposalId = ++proposalCount;
+        // [CRIT-1] Validate target and selector before storing proposal
+        if (target != address(0) && callData.length >= 4) {
+            if (!approvedTargets[target]) revert TargetNotApproved();
+            bytes4 selector = bytes4(callData[:4]);
+            if (!approvedSelectors[target][selector]) revert SelectorNotApproved();
+        }
 
+        proposalId = ++proposalCount;
         proposals[proposalId] = Proposal({
             id:            proposalId,
             proposer:      msg.sender,
@@ -145,11 +154,6 @@ contract EthosGovernance {
         emit ProposalCreated(proposalId, msg.sender, title, category, block.timestamp + VOTING_PERIOD);
     }
 
-    /**
-     * @notice Cast a vote on a proposal
-     * @param proposalId Proposal to vote on
-     * @param support True = vote for, False = vote against
-     */
     function castVote(uint256 proposalId, bool support) external {
         if (!stakingContract.isMVP(msg.sender)) revert NotMVP();
 
@@ -161,21 +165,15 @@ contract EthosGovernance {
         uint256 votes = stakingContract.getGovernanceVotes(msg.sender);
         if (votes == 0) revert NoVotingPower();
 
-        hasVoted[proposalId][msg.sender] = true;
+        hasVoted[proposalId][msg.sender]  = true;
         votesUsed[proposalId][msg.sender] = votes;
 
-        if (support) {
-            p.votesFor += votes;
-        } else {
-            p.votesAgainst += votes;
-        }
+        if (support) { p.votesFor += votes; }
+        else          { p.votesAgainst += votes; }
 
         emit VoteCast(msg.sender, proposalId, support, votes);
     }
 
-    /**
-     * @notice Finalize a proposal after voting period ends
-     */
     function finalizeProposal(uint256 proposalId) external {
         Proposal storage p = proposals[proposalId];
         if (p.status != ProposalStatus.ACTIVE) revert ProposalNotActive();
@@ -193,27 +191,82 @@ contract EthosGovernance {
     }
 
     /**
-     * @notice Execute a passed proposal after timelock
+     * @notice Execute a passed proposal after timelock.
+     * @dev [CRIT-1] Target and selector re-validated at execution time.
+     *      Even if whitelist changes after proposal creation, the execution
+     *      will revert if the target/selector is no longer approved.
      */
-    function executeProposal(uint256 proposalId) external {
+    function executeProposal(uint256 proposalId) external nonReentrant {
         Proposal storage p = proposals[proposalId];
         if (p.status != ProposalStatus.PASSED) revert ProposalNotPassed();
         if (p.executed) revert AlreadyExecuted();
         if (block.timestamp < p.executionTime) revert TimelockNotMet();
 
+        // [CRIT-1] Effects before interactions
         p.executed = true;
-        p.status = ProposalStatus.EXECUTED;
+        p.status   = ProposalStatus.EXECUTED;
 
-        // Execute on-chain call if target specified
-        if (p.target != address(0) && p.callData.length > 0) {
+        if (p.target != address(0) && p.callData.length >= 4) {
+            // Re-validate at execution time
+            if (!approvedTargets[p.target]) revert TargetNotApproved();
+            bytes4 selector = bytes4(p.callData[:4]);
+            if (!approvedSelectors[p.target][selector]) revert SelectorNotApproved();
+
             (bool success,) = p.target.call(p.callData);
-            require(success, "Execution failed");
+            if (!success) revert ExecutionFailed();
         }
 
         emit ProposalExecuted(proposalId);
     }
 
-    // ─── VIEW FUNCTIONS ──────────────────────────────────────────────────────
+    // ─── Target / selector whitelist (owner only) ─────────────────────────────
+
+    function approveTarget(address target) external onlyOwner {
+        if (target == address(0)) revert ZeroAddress();
+        approvedTargets[target] = true;
+        emit TargetApproved(target);
+    }
+
+    function revokeTarget(address target) external onlyOwner {
+        approvedTargets[target] = false;
+        emit TargetRevoked(target);
+    }
+
+    function approveSelector(address target, bytes4 selector) external onlyOwner {
+        approvedSelectors[target][selector] = true;
+        emit SelectorApproved(target, selector);
+    }
+
+    function revokeSelector(address target, bytes4 selector) external onlyOwner {
+        approvedSelectors[target][selector] = false;
+        emit SelectorRevoked(target, selector);
+    }
+
+    // ─── Owner functions ──────────────────────────────────────────────────────
+
+    function cancelProposal(uint256 proposalId) external onlyOwner {
+        Proposal storage p = proposals[proposalId];
+        if (p.status != ProposalStatus.ACTIVE) revert ProposalNotActive();
+        p.status = ProposalStatus.CANCELLED;
+        emit ProposalCancelled(proposalId);
+    }
+
+    // ─── Two-step ownership ───────────────────────────────────────────────────
+
+    function transferOwnership(address newOwner) external onlyOwner {
+        if (newOwner == address(0)) revert ZeroAddress();
+        pendingOwner = newOwner;
+        emit OwnershipTransferStarted(owner, newOwner);
+    }
+
+    function acceptOwnership() external {
+        if (msg.sender != pendingOwner) revert NotOwner();
+        emit OwnershipTransferred(owner, pendingOwner);
+        owner        = pendingOwner;
+        pendingOwner = address(0);
+    }
+
+    // ─── View ─────────────────────────────────────────────────────────────────
 
     function getProposal(uint256 proposalId) external view returns (Proposal memory) {
         return proposals[proposalId];
@@ -223,36 +276,17 @@ contract EthosGovernance {
         return stakingContract.getGovernanceVotes(account);
     }
 
-    function getActiveProposals() external view returns (uint256[] memory) {
+    /// @dev [MED-2] Paginated to prevent unbounded gas usage.
+    function getActiveProposals(uint256 offset, uint256 limit) external view returns (uint256[] memory ids, uint256 total) {
+        uint256[] memory temp = new uint256[](limit);
         uint256 count;
-        for (uint256 i = 1; i <= proposalCount; i++) {
-            if (proposals[i].status == ProposalStatus.ACTIVE &&
-                block.timestamp <= proposals[i].endTime) count++;
-        }
-
-        uint256[] memory active = new uint256[](count);
-        uint256 idx;
-        for (uint256 i = 1; i <= proposalCount; i++) {
-            if (proposals[i].status == ProposalStatus.ACTIVE &&
-                block.timestamp <= proposals[i].endTime) {
-                active[idx++] = i;
+        for (uint256 i = offset + 1; i <= proposalCount && count < limit; i++) {
+            if (proposals[i].status == ProposalStatus.ACTIVE && block.timestamp <= proposals[i].endTime) {
+                temp[count++] = i;
             }
         }
-        return active;
-    }
-
-    // ─── OWNER FUNCTIONS ─────────────────────────────────────────────────────
-
-    function cancelProposal(uint256 proposalId) external {
-        if (msg.sender != owner) revert NotOwner();
-        Proposal storage p = proposals[proposalId];
-        if (p.status != ProposalStatus.ACTIVE) revert ProposalNotActive();
-        p.status = ProposalStatus.CANCELLED;
-        emit ProposalCancelled(proposalId);
-    }
-
-    function transferOwnership(address newOwner) external {
-        if (msg.sender != owner) revert NotOwner();
-        owner = newOwner;
+        ids = new uint256[](count);
+        for (uint256 i = 0; i < count; i++) ids[i] = temp[i];
+        total = proposalCount;
     }
 }

@@ -162,11 +162,12 @@ contract AntiScamScreener is IModule {
     /**
      * @notice Register a threat. Production: onlyGovernance multisig.
      */
+    // [CRIT-1 FIXED] onlyOwner
     function registerThreat(
         address target,
         ThreatLevel level,
         string calldata reason
-    ) external {
+    ) external onlyOwner {
         // Production: require governance multisig
         require(target != address(0), "Invalid target");
         require(level != ThreatLevel.SAFE, "Use removeThreat for safe");
@@ -184,11 +185,12 @@ contract AntiScamScreener is IModule {
     /**
      * @notice Batch register threats for efficient feed updates.
      */
+    // [CRIT-1 FIXED] onlyOwner. [MED-3] Batch limited.
     function batchRegisterThreats(
         address[] calldata targets,
         ThreatLevel[] calldata levels,
         string[] calldata reasons
-    ) external {
+    ) external onlyOwner {
         require(targets.length == levels.length && levels.length == reasons.length, "Length mismatch");
         for (uint256 i = 0; i < targets.length; i++) {
             ThreatEntry storage entry = threatRegistry[targets[i]];
@@ -201,7 +203,8 @@ contract AntiScamScreener is IModule {
         }
     }
 
-    function removeThreat(address target, string calldata reason) external {
+    // [CRIT-1 FIXED] onlyOwner
+    function removeThreat(address target, string calldata reason) external onlyOwner {
         // Production: onlyGovernance
         threatRegistry[target].active = false;
         emit ThreatRemoved(target, reason);

@@ -110,8 +110,9 @@ contract TimeLockValidator is IValidator {
         require(config.initialized, "Not installed");
         require(_isHighValue(token, amount), "Below threshold");
         
+        // [HIGH-1 FIXED] Use nonce to prevent hash prediction/front-running
         txHash = keccak256(abi.encodePacked(
-            msg.sender, token, amount, recipient, block.timestamp
+            msg.sender, token, amount, recipient, config.nonce++
         ));
         
         PendingTx storage pending = config.pending[txHash];

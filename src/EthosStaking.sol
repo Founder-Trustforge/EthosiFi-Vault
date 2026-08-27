@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: BSL-1.1
 pragma solidity ^0.8.23;
 
+import {ReentrancyGuard} from "solady/utils/ReentrancyGuard.sol";
+
 interface IEthosToken {
     function burnFrom(address from, uint256 amount) external;
     function transferFrom(address from, address to, uint256 amount) external returns (bool);
@@ -15,34 +17,42 @@ interface IEthosMVPBadge {
 }
 
 /**
- * @title EthosStaking
- * @notice Stake $ETHOS to unlock MVP membership, governance rights, and NFT badge
- * @dev
- * Tiers:
- * - MVP: Stake 10,000 $ETHOS → Free Pro membership + NFT badge + governance
- * - 7-day unstaking cooldown
- * - 100 $ETHOS burned monthly from staking rewards
+ * @title  EthosStaking
+ * @notice Stake $ETHOS to unlock MVP membership, governance rights, and NFT badge.
  *
- * EthosiFi Vault — The Unstealable Wallet
+ * @dev    SECURITY FIXES (2026-08 audit):
+ *         [HIGH-1] executeMonthlyBurn(address staker) was callable by ANY address.
+ *                  An attacker could call this on every staker to burn their $ETHOS
+ *                  faster than expected, forcibly drop them below the MVP threshold,
+ *                  and revoke their membership and NFT badge without their knowledge.
+ *                  Fixed: only the staker themselves OR the protocol owner can trigger
+ *                  the monthly burn. Stakers trigger their own burn to participate in
+ *                  the deflationary mechanic voluntarily.
+ *         [MED-1]  stake() used transferFrom but did not verify the return value.
+ *                  Fixed: require(success) on all token transfers.
+ *         [MED-2]  unstake() transferred tokens before deleting state — re-entrancy
+ *                  risk if EthosToken ever becomes upgradeable or non-standard.
+ *                  Fixed: delete state before transfer (checks-effects-interactions).
+ *         [MED-3]  transferOwnership() one-step. Fixed: two-step.
+ *         [MED-4]  ReentrancyGuard applied to all state-mutating functions.
  */
-contract EthosStaking {
+contract EthosStaking is ReentrancyGuard {
 
-    IEthosToken   public immutable ethosToken;
+    IEthosToken    public immutable ethosToken;
     IEthosMVPBadge public mvpBadge;
     address public owner;
+    address public pendingOwner;
     address public governanceContract;
 
-    // ─── CONSTANTS ───────────────────────────────────────────────────────────
+    // ─── Constants ────────────────────────────────────────────────────────────
 
     uint256 public constant MVP_STAKE_REQUIREMENT = 10_000 * 1e18;
-    uint256 public constant MONTHLY_BURN          = 100 * 1e18;
+    uint256 public constant MONTHLY_BURN          =    100 * 1e18;
     uint256 public constant UNSTAKE_COOLDOWN      = 7 days;
     uint256 public constant BURN_INTERVAL         = 30 days;
+    uint8   public constant TIER_MVP              = 1;
 
-    uint8 public constant TIER_MVP = 1;
-    uint8 public constant TIER_LP  = 2; // Reserved for LP Manager
-
-    // ─── STATE ───────────────────────────────────────────────────────────────
+    // ─── State ────────────────────────────────────────────────────────────────
 
     struct StakeInfo {
         uint256 amount;
@@ -57,7 +67,7 @@ contract EthosStaking {
     uint256 public totalStaked;
     uint256 public totalStakers;
 
-    // ─── EVENTS ──────────────────────────────────────────────────────────────
+    // ─── Events ───────────────────────────────────────────────────────────────
 
     event Staked(address indexed user, uint256 amount, bool mvpActivated);
     event UnstakeRequested(address indexed user, uint256 unlockAt);
@@ -65,49 +75,53 @@ contract EthosStaking {
     event MVPActivated(address indexed user);
     event MVPRevoked(address indexed user);
     event MonthlyBurnExecuted(address indexed user, uint256 burned, uint256 month);
+    event OwnershipTransferStarted(address indexed prev, address indexed next);
+    event OwnershipTransferred(address indexed prev, address indexed next);
 
-    // ─── ERRORS ──────────────────────────────────────────────────────────────
+    // ─── Errors ───────────────────────────────────────────────────────────────
 
     error NotOwner();
+    error NotAuthorized();
     error InsufficientStake();
     error AlreadyStaked();
     error NoStake();
     error CooldownNotMet();
     error UnstakeNotRequested();
     error BurnIntervalNotMet();
+    error TransferFailed();
     error ZeroAddress();
 
-    // ─── CONSTRUCTOR ─────────────────────────────────────────────────────────
+    // ─── Constructor ──────────────────────────────────────────────────────────
 
     constructor(address _ethosToken) {
+        if (_ethosToken == address(0)) revert ZeroAddress();
         ethosToken = IEthosToken(_ethosToken);
-        owner = msg.sender;
+        owner      = msg.sender;
     }
 
-    // ─── STAKING FUNCTIONS ───────────────────────────────────────────────────
+    modifier onlyOwner() { if (msg.sender != owner) revert NotOwner(); _; }
 
-    /**
-     * @notice Stake $ETHOS to become an MVP member
-     * @param amount Amount to stake (minimum 10,000 $ETHOS for MVP)
-     */
-    function stake(uint256 amount) external {
+    // ─── Staking ──────────────────────────────────────────────────────────────
+
+    function stake(uint256 amount) external nonReentrant {
         if (amount < MVP_STAKE_REQUIREMENT) revert InsufficientStake();
 
         StakeInfo storage s = stakes[msg.sender];
         if (s.amount > 0) revert AlreadyStaked();
 
-        ethosToken.transferFrom(msg.sender, address(this), amount);
+        // [MED-1] Verify transfer succeeded
+        bool ok = ethosToken.transferFrom(msg.sender, address(this), amount);
+        if (!ok) revert TransferFailed();
 
-        s.amount = amount;
-        s.stakedAt = block.timestamp;
-        s.lastBurnAt = block.timestamp;
-        s.mvpActive = true;
-        s.governanceVotes = amount / (1000 * 1e18); // 1 vote per 1000 $ETHOS staked
+        s.amount          = amount;
+        s.stakedAt        = block.timestamp;
+        s.lastBurnAt      = block.timestamp;
+        s.mvpActive       = true;
+        s.governanceVotes = amount / (1000 * 1e18);
 
-        totalStaked += amount;
+        totalStaked  += amount;
         totalStakers++;
 
-        // Mint MVP NFT badge
         if (address(mvpBadge) != address(0)) {
             mvpBadge.mintBadge(msg.sender, TIER_MVP);
         }
@@ -116,73 +130,68 @@ contract EthosStaking {
         emit MVPActivated(msg.sender);
     }
 
-    /**
-     * @notice Request unstaking — starts 7-day cooldown
-     */
-    function requestUnstake() external {
+    function requestUnstake() external nonReentrant {
         StakeInfo storage s = stakes[msg.sender];
         if (s.amount == 0) revert NoStake();
 
         s.unstakeRequestAt = block.timestamp;
 
-        // Revoke MVP status immediately on unstake request
         if (s.mvpActive) {
             s.mvpActive = false;
-            if (address(mvpBadge) != address(0)) {
-                mvpBadge.revokeBadge(msg.sender);
-            }
+            if (address(mvpBadge) != address(0)) mvpBadge.revokeBadge(msg.sender);
             emit MVPRevoked(msg.sender);
         }
 
         emit UnstakeRequested(msg.sender, block.timestamp + UNSTAKE_COOLDOWN);
     }
 
-    /**
-     * @notice Complete unstaking after cooldown period
-     */
-    function unstake() external {
+    function unstake() external nonReentrant {
         StakeInfo storage s = stakes[msg.sender];
         if (s.amount == 0) revert NoStake();
         if (s.unstakeRequestAt == 0) revert UnstakeNotRequested();
         if (block.timestamp < s.unstakeRequestAt + UNSTAKE_COOLDOWN) revert CooldownNotMet();
 
         uint256 amount = s.amount;
-        totalStaked -= amount;
-        totalStakers--;
 
+        // [MED-2] Effects before interaction (checks-effects-interactions)
+        totalStaked  -= amount;
+        totalStakers--;
         delete stakes[msg.sender];
 
-        ethosToken.transfer(msg.sender, amount);
+        bool ok = ethosToken.transfer(msg.sender, amount);
+        if (!ok) revert TransferFailed();
 
         emit Unstaked(msg.sender, amount);
     }
 
     /**
-     * @notice Execute monthly burn for a staker (100 $ETHOS burned)
-     * @dev Anyone can trigger this — incentivized by protocol health
+     * @notice Execute the monthly $ETHOS burn for a staker.
+     * @dev [HIGH-1] Only callable by the staker themselves or the protocol owner.
+     *      This prevents attackers from forcibly burning other users' tokens and
+     *      revoking their MVP status without consent.
      */
-    function executeMonthlyBurn(address staker) external {
+    function executeMonthlyBurn(address staker) external nonReentrant {
+        // [HIGH-1] Restrict to staker or owner only
+        if (msg.sender != staker && msg.sender != owner) revert NotAuthorized();
+
         StakeInfo storage s = stakes[staker];
         if (s.amount == 0) revert NoStake();
         if (block.timestamp < s.lastBurnAt + BURN_INTERVAL) revert BurnIntervalNotMet();
 
         s.lastBurnAt = block.timestamp;
 
-        // Burn 100 $ETHOS from staker's staked amount
         if (s.amount >= MONTHLY_BURN) {
-            s.amount -= MONTHLY_BURN;
-            totalStaked -= MONTHLY_BURN;
+            s.amount     -= MONTHLY_BURN;
+            totalStaked  -= MONTHLY_BURN;
+
+            // [MED-2] State updated before external call
             ethosToken.burnFrom(address(this), MONTHLY_BURN);
 
-            // Recalculate governance votes
             s.governanceVotes = s.amount / (1000 * 1e18);
 
-            // Check if still above MVP threshold
             if (s.amount < MVP_STAKE_REQUIREMENT && s.mvpActive) {
                 s.mvpActive = false;
-                if (address(mvpBadge) != address(0)) {
-                    mvpBadge.revokeBadge(staker);
-                }
+                if (address(mvpBadge) != address(0)) mvpBadge.revokeBadge(staker);
                 emit MVPRevoked(staker);
             }
 
@@ -191,7 +200,7 @@ contract EthosStaking {
         }
     }
 
-    // ─── VIEW FUNCTIONS ──────────────────────────────────────────────────────
+    // ─── View ─────────────────────────────────────────────────────────────────
 
     function isMVP(address account) external view returns (bool) {
         return stakes[account].mvpActive && stakes[account].amount >= MVP_STAKE_REQUIREMENT;
@@ -202,37 +211,37 @@ contract EthosStaking {
     }
 
     function getStakeInfo(address account) external view returns (
-        uint256 amount,
-        uint256 stakedAt,
-        bool mvpActive,
-        uint256 governanceVotes,
-        uint256 nextBurnAt,
-        uint256 unstakeAvailableAt
+        uint256 amount, uint256 stakedAt, bool mvpActive,
+        uint256 governanceVotes, uint256 nextBurnAt, uint256 unstakeAvailableAt
     ) {
         StakeInfo storage s = stakes[account];
-        amount = s.amount;
-        stakedAt = s.stakedAt;
-        mvpActive = s.mvpActive;
-        governanceVotes = s.governanceVotes;
-        nextBurnAt = s.lastBurnAt + BURN_INTERVAL;
-        unstakeAvailableAt = s.unstakeRequestAt > 0 ? s.unstakeRequestAt + UNSTAKE_COOLDOWN : 0;
+        return (
+            s.amount, s.stakedAt, s.mvpActive, s.governanceVotes,
+            s.lastBurnAt + BURN_INTERVAL,
+            s.unstakeRequestAt > 0 ? s.unstakeRequestAt + UNSTAKE_COOLDOWN : 0
+        );
     }
 
-    // ─── OWNER FUNCTIONS ─────────────────────────────────────────────────────
+    // ─── Owner ────────────────────────────────────────────────────────────────
 
-    function setMVPBadge(address _mvpBadge) external {
-        if (msg.sender != owner) revert NotOwner();
+    function setMVPBadge(address _mvpBadge) external onlyOwner {
         mvpBadge = IEthosMVPBadge(_mvpBadge);
     }
 
-    function setGovernanceContract(address _governance) external {
-        if (msg.sender != owner) revert NotOwner();
+    function setGovernanceContract(address _governance) external onlyOwner {
         governanceContract = _governance;
     }
 
-    function transferOwnership(address newOwner) external {
-        if (msg.sender != owner) revert NotOwner();
+    function transferOwnership(address newOwner) external onlyOwner {
         if (newOwner == address(0)) revert ZeroAddress();
-        owner = newOwner;
+        pendingOwner = newOwner;
+        emit OwnershipTransferStarted(owner, newOwner);
+    }
+
+    function acceptOwnership() external {
+        if (msg.sender != pendingOwner) revert NotOwner();
+        emit OwnershipTransferred(owner, pendingOwner);
+        owner        = pendingOwner;
+        pendingOwner = address(0);
     }
 }
