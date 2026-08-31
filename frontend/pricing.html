@@ -1,280 +1,144 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pricing - EthosiFi Vault</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        :root {
-            --bg-primary: #0a0a0f;
-            --bg-secondary: #12121a;
-            --accent: #00d4aa;
-            --accent-glow: rgba(0, 212, 170, 0.15);
-            --text-primary: #ffffff;
-            --text-secondary: #a0a0b0;
-            --border: #1f1f2e;
-        }
-        body {
-            font-family: 'Inter', sans-serif;
-            background: var(--bg-primary);
-            color: var(--text-primary);
-            line-height: 1.6;
-        }
-        nav {
-            position: fixed;
-            top: 0;
-            width: 100%;
-            padding: 1.5rem 5%;
-            background: rgba(10, 10, 15, 0.8);
-            backdrop-filter: blur(20px);
-            border-bottom: 1px solid var(--border);
-            z-index: 1000;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .logo {
-            font-size: 1.5rem;
-            font-weight: 800;
-            background: linear-gradient(135deg, var(--accent), #00a884);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-        .nav-links a {
-            color: var(--text-secondary);
-            text-decoration: none;
-            font-size: 0.9rem;
-            margin-left: 2rem;
-            transition: color 0.3s;
-        }
-        .nav-links a:hover { color: var(--text-primary); }
-        .btn-primary {
-            background: var(--accent);
-            color: var(--bg-primary);
-            padding: 0.6rem 1.2rem;
-            border-radius: 8px;
-            text-decoration: none;
-            font-weight: 600;
-            font-size: 0.9rem;
-        }
-        .hero {
-            padding: 10rem 5% 4rem;
-            text-align: center;
-        }
-        h1 {
-            font-size: 3rem;
-            font-weight: 800;
-            margin-bottom: 1rem;
-        }
-        .subtitle {
-            color: var(--text-secondary);
-            font-size: 1.25rem;
-            max-width: 600px;
-            margin: 0 auto;
-        }
-        .pricing-grid {
-            max-width: 1200px;
-            margin: 4rem auto;
-            padding: 0 5%;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 2rem;
-        }
-        .pricing-card {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 2.5rem;
-            position: relative;
-        }
-        .pricing-card.featured {
-            border-color: var(--accent);
-            transform: scale(1.05);
-        }
-        .featured-badge {
-            position: absolute;
-            top: -12px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: var(--accent);
-            color: var(--bg-primary);
-            padding: 0.25rem 1rem;
-            border-radius: 100px;
-            font-size: 0.75rem;
-            font-weight: 700;
-        }
-        .plan-name {
-            font-size: 1.5rem;
-            font-weight: 700;
-            margin-bottom: 0.5rem;
-        }
-        .plan-price {
-            font-size: 3rem;
-            font-weight: 800;
-            margin-bottom: 0.5rem;
-        }
-        .plan-price span {
-            font-size: 1rem;
-            color: var(--text-secondary);
-            font-weight: 400;
-        }
-        .plan-description {
-            color: var(--text-secondary);
-            margin-bottom: 2rem;
-        }
-        .features-list {
-            list-style: none;
-            margin-bottom: 2rem;
-        }
-        .features-list li {
-            padding: 0.75rem 0;
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-        }
-        .features-list li:before {
-            content: '✓';
-            color: var(--accent);
-            margin-right: 0.75rem;
-            font-weight: 700;
-        }
-        .btn-primary {
-            display: block;
-            width: 100%;
-            background: var(--accent);
-            color: var(--bg-primary);
-            padding: 1rem;
-            border-radius: 8px;
-            text-decoration: none;
-            font-weight: 600;
-            text-align: center;
-            border: none;
-            cursor: pointer;
-        }
-        .btn-secondary {
-            display: block;
-            width: 100%;
-            background: transparent;
-            color: var(--text-primary);
-            padding: 1rem;
-            border-radius: 8px;
-            text-decoration: none;
-            font-weight: 600;
-            text-align: center;
-            border: 1px solid var(--border);
-        }
-        .enterprise {
-            max-width: 800px;
-            margin: 4rem auto;
-            padding: 3rem;
-            background: var(--bg-secondary);
-            border-radius: 16px;
-            text-align: center;
-        }
-        .enterprise h2 {
-            font-size: 2rem;
-            margin-bottom: 1rem;
-        }
-        .enterprise p {
-            color: var(--text-secondary);
-            margin-bottom: 2rem;
-        }
-        footer {
-            padding: 3rem 5%;
-            border-top: 1px solid var(--border);
-            text-align: center;
-            color: var(--text-secondary);
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pricing — EthosiFi Vault</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Syne:wght@400;600;800&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+:root{--void:#000308;--navy:#020818;--deep:#050f28;--cyan:#00d4ff;--electric:#0055ff;--green:#00ff88;--white:#f0f8ff;--off:#b8cfe0;--muted:#4a6a85;--border:rgba(0,212,255,0.12);--border2:rgba(0,212,255,0.25);--card:rgba(2,12,35,0.85);--red:#ff2244;--gold:#ffcc00;}
+body{background:var(--void);color:var(--white);font-family:'Syne',sans-serif;min-height:100vh;cursor:none;}
+.cursor{position:fixed;width:10px;height:10px;background:var(--cyan);border-radius:50%;pointer-events:none;z-index:99999;transform:translate(-50%,-50%);mix-blend-mode:screen;}
+.cursor-ring{position:fixed;width:32px;height:32px;border:1px solid rgba(0,212,255,0.5);border-radius:50%;pointer-events:none;z-index:99998;transform:translate(-50%,-50%);}
+.bg-grid{position:fixed;inset:0;background-image:linear-gradient(rgba(0,212,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,255,0.02) 1px,transparent 1px);background-size:80px 80px;pointer-events:none;z-index:0;}
+nav{position:fixed;top:0;left:0;right:0;z-index:1000;padding:0 48px;height:68px;display:flex;align-items:center;justify-content:space-between;background:rgba(0,3,8,0.95);backdrop-filter:blur(24px);border-bottom:1px solid var(--border);}
+.nav-logo{font-family:'Orbitron',monospace;font-size:20px;font-weight:900;color:var(--cyan);letter-spacing:3px;text-decoration:none;}
+.nav-back{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);text-decoration:none;letter-spacing:2px;transition:color 0.2s;}
+.nav-back:hover{color:var(--white);}
+.page{position:relative;z-index:2;padding:120px 48px 80px;max-width:1200px;margin:0 auto;}
+.stag{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--cyan);letter-spacing:5px;text-transform:uppercase;display:block;margin-bottom:20px;}
+.stitle{font-family:'Orbitron',monospace;font-size:clamp(36px,5vw,64px);font-weight:900;line-height:1.05;margin-bottom:20px;}
+.ssub{font-size:16px;color:var(--off);line-height:1.8;max-width:580px;margin-bottom:64px;}
+.pgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);margin-bottom:64px;}
+.pcard{background:var(--card);padding:36px 28px;position:relative;}
+.pcard.feat{background:rgba(0,25,65,0.9);border:1px solid rgba(0,212,255,0.3);margin:-1px;z-index:1;}
+.pbadge{position:absolute;top:-1px;left:50%;transform:translateX(-50%);background:linear-gradient(90deg,var(--cyan),var(--electric));color:var(--void);font-family:'Orbitron',monospace;font-size:8px;font-weight:700;letter-spacing:2px;padding:4px 16px;white-space:nowrap;}
+.ptier{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:3px;text-transform:uppercase;margin-bottom:14px;display:block;}
+.pprice{font-family:'Orbitron',monospace;font-size:36px;font-weight:900;color:var(--white);margin-bottom:4px;}
+.pprice span{font-size:14px;color:var(--muted);}
+.pdesc{font-size:12px;color:var(--muted);margin-bottom:24px;line-height:1.6;}
+.plist{list-style:none;display:flex;flex-direction:column;gap:10px;margin-bottom:32px;}
+.plist li{font-size:12px;color:var(--off);display:flex;align-items:flex-start;gap:8px;line-height:1.5;}
+.plist li::before{content:"✓";color:var(--green);font-family:'JetBrains Mono',monospace;flex-shrink:0;}
+.pbtn{width:100%;padding:14px;font-family:'Orbitron',monospace;font-size:11px;font-weight:700;letter-spacing:2px;cursor:none;border:1px solid var(--border2);background:transparent;color:var(--white);transition:all 0.2s;text-decoration:none;display:block;text-align:center;}
+.pbtn:hover{border-color:var(--cyan);color:var(--cyan);}
+.pbtn.f{background:linear-gradient(90deg,var(--cyan),var(--electric));border:none;color:var(--void);}
+.pbtn.f:hover{opacity:0.9;}
+.faq{margin-top:48px;}
+.faq-title{font-family:'Orbitron',monospace;font-size:14px;font-weight:700;color:var(--white);letter-spacing:1px;margin-bottom:32px;}
+.faq-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;}
+.faq-item{background:var(--card);border:1px solid var(--border);padding:24px;}
+.faq-q{font-family:'Orbitron',monospace;font-size:12px;color:var(--white);font-weight:700;margin-bottom:10px;}
+.faq-a{font-size:12px;color:var(--off);line-height:1.7;}
+@media(max-width:1024px){.pgrid{grid-template-columns:1fr 1fr;}.faq-grid{grid-template-columns:1fr;}}
+@media(max-width:640px){.pgrid{grid-template-columns:1fr;}.page{padding:100px 20px 60px;}}
+</style>
 </head>
 <body>
-    <nav>
-        <div class="logo">EthosiFi</div>
-        <div class="nav-links">
-            <a href="/">Home</a>
-            <a href="/pricing.html">Pricing</a>
-            <a href="mailto:founder@ethosifi.com">Contact</a>
-            <a href="https://ethosifi.xyz" class="btn-primary">Try Vault</a>
-        </div>
-    </nav>
+<div class="cursor" id="cursor"></div>
+<div class="cursor-ring" id="cursorRing"></div>
+<div class="bg-grid"></div>
+<nav>
+  <a href="/" class="nav-logo">⬡ ETHOSIFI</a>
+  <a href="/" class="nav-back">← Back to Home</a>
+</nav>
+<div class="page">
+  <span class="stag">// Pricing</span>
+  <h1 class="stitle">Simple pricing.<br>No surprises.</h1>
+  <p class="ssub">Security shouldn't be a luxury. Start free, upgrade when you're ready — or earn Pro access by participating in the EthosiFi ecosystem.</p>
+  <div class="pgrid">
+    <div class="pcard">
+      <span class="ptier">Free</span>
+      <div class="pprice">$0<span>/month</span></div>
+      <p class="pdesc">Full security stack, 10 transactions per month. No credit card. No commitment.</p>
+      <ul class="plist">
+        <li>10 protected transactions/month</li>
+        <li>All 18 security modules</li>
+        <li>Emergency freeze</li>
+        <li>Poisoned address protection</li>
+        <li>Anti-scam screener</li>
+        <li>Community Hub access</li>
+        <li>Sepolia testnet access</li>
+      </ul>
+      <a href="/dashboard.html" class="pbtn">CREATE VAULT</a>
+    </div>
+    <div class="pcard feat">
+      <span class="pbadge">MOST POPULAR</span>
+      <span class="ptier">Pro</span>
+      <div class="pprice">$9.99<span>/month</span></div>
+      <p class="pdesc">Unlimited transactions, priority AI detection, advanced analytics. Or burn 100 $ETHOS/month instead.</p>
+      <ul class="plist">
+        <li>Unlimited protected transactions</li>
+        <li>All 18 security modules</li>
+        <li>AI Threat Oracle priority queue</li>
+        <li>Guardian network (up to 5 guardians)</li>
+        <li>Transaction analytics dashboard</li>
+        <li>Email security alerts</li>
+        <li>Priority support</li>
+        <li>Or burn 100 $ETHOS/month</li>
+      </ul>
+      <a href="/dashboard.html" class="pbtn f">GO PRO</a>
+    </div>
+    <div class="pcard">
+      <span class="ptier">MVP</span>
+      <div class="pprice">Free<span> w/ stake</span></div>
+      <p class="pdesc">Hold 10,000 $ETHOS tokens. Unlock permanent Pro access and governance voting rights forever.</p>
+      <ul class="plist">
+        <li>Everything in Pro — forever</li>
+        <li>Soulbound NFT membership badge</li>
+        <li>$ETHOS governance voting rights</li>
+        <li>Early access to new modules</li>
+        <li>MVP community channel</li>
+        <li>Name in protocol credits</li>
+        <li>Feature request priority</li>
+      </ul>
+      <a href="/dashboard.html" class="pbtn">GET $ETHOS</a>
+    </div>
+    <div class="pcard">
+      <span class="ptier">LP Provider</span>
+      <div class="pprice">Free<span> w/ LP</span></div>
+      <p class="pdesc">Provide $500+ in $ETHOS liquidity. Earn ongoing LP rewards and permanent Pro access.</p>
+      <ul class="plist">
+        <li>Everything in Pro — forever</li>
+        <li>Gold NFT liquidity badge</li>
+        <li>LP reward distributions</li>
+        <li>Protocol fee share</li>
+        <li>Governance multiplier (2x voting)</li>
+        <li>Priority support</li>
+        <li>Featured in LP leaderboard</li>
+      </ul>
+      <a href="/dashboard.html" class="pbtn">PROVIDE LIQUIDITY</a>
+    </div>
+  </div>
 
-    <section class="hero">
-        <h1>Simple Pricing</h1>
-        <p class="subtitle">Pay for security, not complexity. Start free, upgrade when you grow.</p>
-    </section>
-
-    <section class="pricing-grid">
-        <div class="pricing-card">
-            <div class="plan-name">Free</div>
-            <div class="plan-price">$0<span>/month</span></div>
-            <p class="plan-description">For trying out the unstealable wallet</p>
-            <ul class="features-list">
-                <li>Up to $1,000 monthly volume</li>
-                <li>10 transactions/month</li>
-                <li>48-hour time-lock</li>
-                <li>1 guardian</li>
-                <li>Community support</li>
-            </ul>
-            <a href="https://ethosifi.xyz" class="btn-secondary">Get Started</a>
-        </div>
-
-        <div class="pricing-card featured">
-            <div class="featured-badge">MOST POPULAR</div>
-            <div class="plan-name">Pro</div>
-            <div class="plan-price">$9.99<span>/month</span></div>
-            <p class="plan-description">For serious crypto users</p>
-            <ul class="features-list">
-                <li>Unlimited volume</li>
-                <li>Unlimited transactions</li>
-                <li>Instant biometric bypass</li>
-                <li>3 guardians</li>
-                <li>AI fraud monitoring</li>
-                <li>Priority support</li>
-                <li>Custom time-lock settings</li>
-            </ul>
-            <a href="https://ethosifi.xyz" class="btn-primary">Start Free Trial</a>
-        </div>
-
-        <div class="pricing-card">
-            <div class="plan-name">Family</div>
-            <div class="plan-price">$19.99<span>/month</span></div>
-            <p class="plan-description">For families and small teams</p>
-            <ul class="features-list">
-                <li>Everything in Pro</li>
-                <li>5 sub-accounts</li>
-                <li>Shared guardians</li>
-                <li>Estate planning tools</li>
-                <li>Dedicated support</li>
-            </ul>
-            <a href="mailto:founder@ethosifi.com" class="btn-secondary">Contact Sales</a>
-        </div>
-    </section>
-
-    <section class="enterprise">
-        <h2>Enterprise & B2B</h2>
-        <p>White-label Vault for your wallet, exchange, or fintech. SDK integration in 2 weeks.</p>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 2rem; margin-top: 2rem; text-align: left;">
-            <div>
-                <h3 style="color: var(--accent); margin-bottom: 0.5rem;">SDK License</h3>
-                <p style="color: var(--text-secondary); font-size: 0.9rem;">$0.01/tx + $5k/month</p>
-            </div>
-            <div>
-                <h3 style="color: var(--accent); margin-bottom: 0.5rem;">White-Label</h3>
-                <p style="color: var(--text-secondary); font-size: 0.9rem;">$50k setup + $10k/month</p>
-            </div>
-            <div>
-                <h3 style="color: var(--accent); margin-bottom: 0.5rem;">Institutional</h3>
-                <p style="color: var(--text-secondary); font-size: 0.9rem;">0.5% AUM/year</p>
-            </div>
-        </div>
-        <a href="mailto:founder@ethosifi.com" class="btn-primary" style="max-width: 300px; margin: 2rem auto 0;">Contact Enterprise Sales</a>
-    </section>
-
-    <footer>
-        <p>© 2025 EthosiFi. All rights reserved.</p>
-        <p>Questions? Email founder@ethosifi.com</p>
-    </footer>
+  <div class="faq">
+    <div class="faq-title">Frequently Asked Questions</div>
+    <div class="faq-grid">
+      <div class="faq-item"><div class="faq-q">Is EthosiFi on mainnet yet?</div><div class="faq-a">EthosiFi is currently deployed on Ethereum Sepolia testnet with 13 verified contracts. Mainnet launch is targeted for Q3 2026 following completion of our security audit.</div></div>
+      <div class="faq-item"><div class="faq-q">Do I need to move my existing funds?</div><div class="faq-a">No. EthosiFi wraps your existing wallet — you keep your current address and your existing funds stay where they are. The vault adds a security layer on top.</div></div>
+      <div class="faq-item"><div class="faq-q">What is $ETHOS and how do I get it?</div><div class="faq-a">$ETHOS is the EthosiFi governance token with a fixed supply of 100 million tokens. It launches with mainnet. Holding 10,000 tokens unlocks permanent Pro access.</div></div>
+      <div class="faq-item"><div class="faq-q">Can I cancel my Pro subscription?</div><div class="faq-a">Yes. Cancel anytime — your vault stays active on the Free tier with 10 transactions per month. No cancellation fees, no locked contracts.</div></div>
+      <div class="faq-item"><div class="faq-q">Is my private key ever at risk?</div><div class="faq-a">Never. EthosiFi is a smart contract security layer — we never have access to your private key, seed phrase, or wallet credentials. The contracts enforce security without accessing your keys.</div></div>
+      <div class="faq-item"><div class="faq-q">What chains will EthosiFi support?</div><div class="faq-a">We're launching on Ethereum mainnet first. EVM-compatible chains (Base, Arbitrum, Polygon, Optimism, X1 EcoChain) are on the roadmap based on community demand.</div></div>
+    </div>
+  </div>
+</div>
+<script>
+const cur=document.getElementById('cursor'),rng=document.getElementById('cursorRing');
+let mx=0,my=0,rx=0,ry=0;
+document.addEventListener('mousemove',e=>{mx=e.clientX;my=e.clientY;cur.style.left=mx+'px';cur.style.top=my+'px';});
+(function loop(){rx+=(mx-rx)*0.12;ry+=(my-ry)*0.12;rng.style.left=rx+'px';rng.style.top=ry+'px';requestAnimationFrame(loop);})();
+</script>
 </body>
 </html>

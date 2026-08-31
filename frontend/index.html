@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="EthosiFi Vault — The Unstealable Wallet. Smart contract security that makes crypto theft structurally impossible.">
+<meta property="og:title" content="EthosiFi Vault — The Unstealable Wallet">
+<meta property="og:description" content="Security enforced at the smart contract layer. Not the app layer. The contract.">
+<title>EthosiFi Vault — The Unstealable Wallet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --void:#000308;--navy:#020818;--deep:#050f28;
+  --cyan:#00d4ff;--electric:#0055ff;--green:#00ff88;
+  --white:#f0f8ff;--off:#b8cfe0;--muted:#4a6a85;
+  --border:rgba(0,212,255,0.12);--border2:rgba(0,212,255,0.25);
+  --card:rgba(2,12,35,0.8);--red:#ff2244;--gold:#ffcc00;
+}
+html{scroll-behavior:smooth;}
+body{background:var(--void);color:var(--white);font-family:'Syne',sans-serif;overflow-x:hidden;cursor:none;}
+.cursor{position:fixed;width:10px;height:10px;background:var(--cyan);border-radius:50%;pointer-events:none;z-index:99999;transform:translate(-50%,-50%);mix-blend-mode:screen;}
+.cursor-ring{position:fixed;width:32px;height:32px;border:1px solid rgba(0,212,255,0.5);border-radius:50%;pointer-events:none;z-index:99998;transform:translate(-50%,-50%);}
+.bg-grid{position:fixed;inset:0;background-image:linear-gradient(rgba(0,212,255,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,255,0.025) 1px,transparent 1px);background-size:80px 80px;pointer-events:none;z-index:0;}
+nav{position:fixed;top:0;left:0;right:0;z-index:1000;padding:0 48px;height:68px;display:flex;align-items:center;justify-content:space-between;background:rgba(0,3,8,0.92);backdrop-filter:blur(24px);border-bottom:1px solid var(--border);}
+.nav-logo{font-family:'Orbitron',monospace;font-size:20px;font-weight:900;color:var(--cyan);letter-spacing:3px;text-decoration:none;display:flex;align-items:center;gap:10px;}
+.nav-logo-hex{width:28px;height:28px;background:linear-gradient(135deg,var(--cyan),var(--electric));clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);}
+.nav-links{display:flex;align-items:center;gap:32px;}
+.nav-links a{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);text-decoration:none;letter-spacing:2px;text-transform:uppercase;transition:color 0.2s;}
+.nav-links a:hover{color:var(--white);}
+.nav-cta{background:transparent;border:1px solid var(--cyan);color:var(--cyan);padding:10px 24px;font-family:'Orbitron',monospace;font-size:11px;font-weight:700;letter-spacing:2px;cursor:none;text-decoration:none;transition:all 0.25s;clip-path:polygon(0 0,calc(100% - 8px) 0,100% 8px,100% 100%,8px 100%,0 calc(100% - 8px));}
+.nav-cta:hover{background:var(--cyan);color:var(--void);}
+.hero{position:relative;z-index:2;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:100px 40px 100px;}
+.hero-eyebrow{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--green);letter-spacing:5px;text-transform:uppercase;margin-bottom:28px;display:flex;align-items:center;gap:12px;}
+.hero-eyebrow::before,.hero-eyebrow::after{content:'';height:1px;width:40px;background:var(--green);opacity:0.5;}
+.hero-title{font-family:'Orbitron',monospace;font-size:clamp(52px,9vw,110px);font-weight:900;line-height:0.92;letter-spacing:-3px;margin-bottom:12px;}
+.t1{color:var(--white);}
+.t2{background:linear-gradient(90deg,var(--cyan),var(--electric),var(--cyan));background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:shimmer 4s linear infinite;}
+.t3{color:transparent;-webkit-text-stroke:1px rgba(0,212,255,0.25);font-size:clamp(44px,7vw,88px);}
+@keyframes shimmer{to{background-position:200% center;}}
+.hero-sub{font-size:clamp(15px,2vw,19px);color:var(--off);line-height:1.75;max-width:620px;margin:32px auto 48px;}
+.hero-sub strong{color:var(--white);}
+.hero-actions{display:flex;align-items:center;gap:16px;justify-content:center;flex-wrap:wrap;margin-bottom:72px;}
+.btn-primary{background:linear-gradient(90deg,var(--cyan),var(--electric));border:none;color:var(--void);padding:18px 44px;font-family:'Orbitron',monospace;font-size:13px;font-weight:700;letter-spacing:2px;cursor:none;text-decoration:none;transition:opacity 0.2s,transform 0.2s;clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,12px 100%,0 calc(100% - 12px));display:inline-block;}
+.btn-primary:hover{opacity:0.9;transform:translateY(-2px);}
+.btn-secondary{background:transparent;border:1px solid var(--border2);color:var(--white);padding:18px 44px;font-family:'Orbitron',monospace;font-size:13px;font-weight:700;letter-spacing:2px;cursor:none;text-decoration:none;transition:all 0.25s;clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,12px 100%,0 calc(100% - 12px));display:inline-block;}
+.btn-secondary:hover{border-color:var(--cyan);color:var(--cyan);}
+.hero-stats{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--border);background:var(--card);backdrop-filter:blur(20px);width:100%;max-width:800px;}
+.stat{padding:24px 32px;text-align:center;border-right:1px solid var(--border);}
+.stat:last-child{border-right:none;}
+.stat-n{font-family:'Orbitron',monospace;font-size:26px;font-weight:900;color:var(--cyan);display:block;margin-bottom:4px;}
+.stat-l{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;}
+.ticker-wrap{position:relative;z-index:2;background:rgba(255,34,68,0.05);border-top:1px solid rgba(255,34,68,0.15);border-bottom:1px solid rgba(255,34,68,0.15);padding:14px 0;overflow:hidden;}
+.ticker{display:flex;gap:60px;animation:tick 35s linear infinite;white-space:nowrap;}
+@keyframes tick{0%{transform:translateX(0);}100%{transform:translateX(-50%);}}
+.tick-item{font-family:'JetBrains Mono',monospace;font-size:11px;color:rgba(255,100,120,0.75);letter-spacing:1px;display:flex;align-items:center;gap:8px;}
+.tick-dot{width:5px;height:5px;border-radius:50%;background:var(--red);animation:blink 1.5s ease infinite;}
+@keyframes blink{0%,100%{opacity:1;}50%{opacity:0.2;}}
+section{position:relative;z-index:2;}
+.wrap{max-width:1200px;margin:0 auto;padding:0 48px;}
+.stag{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--cyan);letter-spacing:5px;text-transform:uppercase;display:block;margin-bottom:20px;}
+.stitle{font-family:'Orbitron',monospace;font-size:clamp(30px,4vw,52px);font-weight:900;line-height:1.05;margin-bottom:20px;}
+.ssub{font-size:15px;color:var(--off);line-height:1.8;max-width:580px;}
+.problem{padding:120px 0;}
+.pgrid{display:grid;grid-template-columns:1fr 1fr;gap:2px;margin-top:64px;background:var(--border);}
+.pcell{background:var(--card);padding:40px;transition:background 0.3s;}
+.pcell:hover{background:rgba(5,20,50,0.95);}
+.picon{font-size:34px;margin-bottom:18px;display:block;}
+.ptitle{font-family:'Orbitron',monospace;font-size:13px;font-weight:700;color:var(--white);margin-bottom:10px;letter-spacing:1px;}
+.ptext{font-size:12px;color:var(--off);line-height:1.8;}
+.pamount{font-family:'Orbitron',monospace;font-size:22px;font-weight:900;color:var(--red);margin-top:16px;display:block;}
+.how{padding:120px 0;background:linear-gradient(180deg,var(--void) 0%,var(--deep) 50%,var(--void) 100%);}
+.how-grid{display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:center;margin-top:64px;}
+.steps{display:flex;flex-direction:column;gap:0;}
+.step{display:flex;gap:24px;padding:28px 0;border-bottom:1px solid var(--border);}
+.step:last-child{border-bottom:none;}
+.step:hover .snum{border-color:var(--cyan);color:var(--cyan);}
+.snum{width:48px;height:48px;border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-family:'Orbitron',monospace;font-size:13px;font-weight:700;color:var(--muted);flex-shrink:0;transition:all 0.2s;}
+.stitle2{font-family:'Orbitron',monospace;font-size:12px;font-weight:700;color:var(--white);margin-bottom:8px;letter-spacing:1px;}
+.stext{font-size:12px;color:var(--off);line-height:1.7;}
+.vault-vis{position:relative;display:flex;align-items:center;justify-content:center;height:480px;}
+.vring{position:absolute;border-radius:50%;border:1px solid;animation:spin linear infinite;}
+.vr1{width:380px;height:380px;border-color:rgba(0,212,255,0.07);animation-duration:40s;}
+.vr2{width:290px;height:290px;border-color:rgba(0,212,255,0.12);animation-duration:28s;animation-direction:reverse;}
+.vr3{width:210px;height:210px;border-color:rgba(0,212,255,0.2);animation-duration:18s;}
+@keyframes spin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
+.vcore{position:relative;z-index:2;width:140px;height:140px;background:linear-gradient(135deg,var(--deep),rgba(0,85,255,0.12));border:1px solid rgba(0,212,255,0.3);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;}
+.vcore-hex{font-size:44px;}
+.vcore-lbl{font-family:'Orbitron',monospace;font-size:8px;color:var(--cyan);letter-spacing:4px;}
+.vnode{position:absolute;width:40px;height:40px;background:var(--card);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:16px;}
+.vn1{top:30px;left:50%;transform:translateX(-50%);}
+.vn2{top:50%;right:30px;transform:translateY(-50%);}
+.vn3{bottom:30px;left:50%;transform:translateX(-50%);}
+.vn4{top:50%;left:30px;transform:translateY(-50%);}
+.vn5{top:70px;right:75px;}
+.vn6{bottom:70px;right:75px;}
+.vn7{bottom:70px;left:75px;}
+.vn8{top:70px;left:75px;}
+.modules{padding:120px 0;}
+.mgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;margin-top:64px;background:var(--border);}
+.mcard{background:var(--card);padding:32px;transition:background 0.3s;position:relative;overflow:hidden;}
+.mcard::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);opacity:0;transition:opacity 0.3s;}
+.mcard:hover{background:rgba(0,15,40,0.95);}
+.mcard:hover::before{opacity:1;}
+.micon{font-size:30px;margin-bottom:18px;display:block;}
+.mname{font-family:'Orbitron',monospace;font-size:11px;font-weight:700;color:var(--white);margin-bottom:9px;letter-spacing:1px;}
+.mdesc{font-size:11px;color:var(--off);line-height:1.7;}
+.mbadge{display:inline-flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--green);margin-top:14px;letter-spacing:1px;}
+.mbadge::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--green);}
+.contracts{padding:120px 0;background:linear-gradient(180deg,var(--void),rgba(0,5,20,1));}
+.ctable{margin-top:64px;border:1px solid var(--border);}
+.cheader{display:grid;grid-template-columns:2fr 3fr 1fr;padding:14px 24px;background:rgba(0,212,255,0.04);border-bottom:1px solid var(--border);}
+.cheader span{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--cyan);letter-spacing:3px;text-transform:uppercase;}
+.crow{display:grid;grid-template-columns:2fr 3fr 1fr;padding:15px 24px;border-bottom:1px solid var(--border);transition:background 0.2s;align-items:center;}
+.crow:last-child{border-bottom:none;}
+.crow:hover{background:rgba(0,212,255,0.03);}
+.cname{font-family:'Orbitron',monospace;font-size:11px;color:var(--white);font-weight:700;}
+.caddr{font-family:'JetBrains Mono',monospace;font-size:10px;}
+.caddr a{color:var(--cyan);text-decoration:none;transition:opacity 0.2s;}
+.caddr a:hover{opacity:0.7;}
+.cbadge{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--green);letter-spacing:2px;display:flex;align-items:center;gap:5px;}
+.cbadge::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--green);}
+.pricing{padding:120px 0;}
+.pgrid2{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;margin-top:64px;background:var(--border);}
+.pcard{background:var(--card);padding:32px 24px;position:relative;transition:background 0.3s;}
+.pcard.feat{background:rgba(0,25,60,0.9);border:1px solid rgba(0,212,255,0.3);margin:-1px;z-index:1;}
+.pbadge2{position:absolute;top:-1px;left:50%;transform:translateX(-50%);background:linear-gradient(90deg,var(--cyan),var(--electric));color:var(--void);font-family:'Orbitron',monospace;font-size:8px;font-weight:700;letter-spacing:2px;padding:4px 16px;white-space:nowrap;}
+.ptier{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:3px;text-transform:uppercase;margin-bottom:14px;display:block;}
+.pprice{font-family:'Orbitron',monospace;font-size:32px;font-weight:900;color:var(--white);margin-bottom:4px;}
+.pprice span{font-size:14px;color:var(--muted);}
+.pdesc2{font-size:11px;color:var(--muted);margin-bottom:24px;line-height:1.6;}
+.pfeats{list-style:none;display:flex;flex-direction:column;gap:9px;margin-bottom:28px;}
+.pfeats li{font-size:11px;color:var(--off);display:flex;align-items:flex-start;gap:7px;line-height:1.5;}
+.pfeats li::before{content:"→";color:var(--cyan);font-family:'JetBrains Mono',monospace;flex-shrink:0;margin-top:1px;}
+.pbtn2{width:100%;padding:13px;font-family:'Orbitron',monospace;font-size:10px;font-weight:700;letter-spacing:2px;cursor:none;border:1px solid var(--border2);background:transparent;color:var(--white);transition:all 0.2s;text-decoration:none;display:block;text-align:center;}
+.pbtn2:hover{border-color:var(--cyan);color:var(--cyan);}
+.pbtn2.fbtn{background:linear-gradient(90deg,var(--cyan),var(--electric));border:none;color:var(--void);}
+.pbtn2.fbtn:hover{opacity:0.9;}
+.cta-sec{padding:160px 0;text-align:center;background:linear-gradient(180deg,var(--void),var(--deep),var(--void));position:relative;overflow:hidden;}
+.cta-sec::before{content:'';position:absolute;width:600px;height:600px;border-radius:50%;background:radial-gradient(circle,rgba(0,212,255,0.04) 0%,transparent 70%);top:50%;left:50%;transform:translate(-50%,-50%);}
+.cta-title{font-family:'Orbitron',monospace;font-size:clamp(34px,5vw,60px);font-weight:900;line-height:1.05;margin-bottom:24px;}
+.cta-sub{font-size:15px;color:var(--off);margin-bottom:48px;max-width:540px;margin-left:auto;margin-right:auto;line-height:1.75;}
+.cta-note{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);margin-top:24px;letter-spacing:1px;}
+footer{border-top:1px solid var(--border);padding:48px;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:40px;}
+.flogo{font-family:'Orbitron',monospace;font-size:16px;font-weight:900;color:var(--cyan);letter-spacing:3px;text-decoration:none;display:block;margin-bottom:12px;}
+.ftagline{font-size:12px;color:var(--muted);line-height:1.6;}
+.fctitle{font-family:'Orbitron',monospace;font-size:9px;font-weight:700;color:var(--white);letter-spacing:3px;margin-bottom:16px;}
+.flinks{list-style:none;display:flex;flex-direction:column;gap:10px;}
+.flinks a{font-size:12px;color:var(--muted);text-decoration:none;transition:color 0.2s;}
+.flinks a:hover{color:var(--white);}
+.fbot{border-top:1px solid var(--border);padding:22px 48px;display:flex;justify-content:space-between;align-items:center;}
+.fbottxt{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;}
+.netbadge{display:flex;align-items:center;gap:8px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);}
+.ndot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pdot 2s ease infinite;}
+@keyframes pdot{0%,100%{box-shadow:0 0 0 0 rgba(0,255,136,0.4);}50%{box-shadow:0 0 0 6px rgba(0,255,136,0);}}
+.status-bar{position:fixed;bottom:0;left:0;right:0;z-index:500;background:rgba(0,3,8,0.92);backdrop-filter:blur(20px);border-top:1px solid var(--border);padding:10px 48px;display:flex;align-items:center;justify-content:space-between;}
+.sitems{display:flex;align-items:center;gap:28px;}
+.sitem{display:flex;align-items:center;gap:7px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;}
+.sg{width:6px;height:6px;border-radius:50%;background:var(--green);}
+.sc{width:6px;height:6px;border-radius:50%;background:var(--cyan);}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,3,8,0.97);z-index:9000;display:none;align-items:center;justify-content:center;backdrop-filter:blur(16px);}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--deep);border:1px solid var(--border2);padding:48px;max-width:480px;width:90%;position:relative;}
+.mclose{position:absolute;top:20px;right:20px;background:none;border:none;color:var(--muted);font-size:20px;cursor:none;transition:color 0.2s;font-family:'JetBrains Mono',monospace;}
+.mclose:hover{color:var(--white);}
+.mtitle{font-family:'Orbitron',monospace;font-size:18px;font-weight:700;color:var(--white);margin-bottom:8px;}
+.msub{font-size:12px;color:var(--muted);margin-bottom:28px;line-height:1.7;}
+.wopts{display:flex;flex-direction:column;gap:10px;margin-bottom:24px;}
+.wopt{display:flex;align-items:center;gap:16px;padding:16px 20px;background:rgba(0,212,255,0.03);border:1px solid var(--border);cursor:none;transition:all 0.2s;}
+.wopt:hover{border-color:var(--cyan);background:rgba(0,212,255,0.07);}
+.wopt-icon{font-size:26px;}
+.wopt-name{font-family:'Orbitron',monospace;font-size:12px;color:var(--white);}
+.wopt-desc{font-size:10px;color:var(--muted);}
+.wnotice{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);text-align:center;line-height:1.9;border-top:1px solid var(--border);padding-top:20px;}
+.fade-up{opacity:0;transform:translateY(30px);transition:opacity 0.7s ease,transform 0.7s ease;}
+.fade-up.visible{opacity:1;transform:translateY(0);}
+@media(max-width:1024px){.mgrid{grid-template-columns:repeat(2,1fr);}.pgrid2{grid-template-columns:repeat(2,1fr);}.how-grid{grid-template-columns:1fr;}.vault-vis{display:none;}footer{grid-template-columns:1fr 1fr;}.hero-stats{grid-template-columns:1fr 1fr;}}
+@media(max-width:768px){nav{padding:0 20px;}.nav-links{display:none;}.hero{padding:80px 20px 80px;}.hero-stats{grid-template-columns:1fr 1fr;}.wrap{padding:0 20px;}.pgrid{grid-template-columns:1fr;}.mgrid{grid-template-columns:1fr;}.pgrid2{grid-template-columns:1fr;}.cheader,.crow{grid-template-columns:1fr;}.cheader span:not(:first-child){display:none;}.caddr,.cbadge{display:none;}footer{grid-template-columns:1fr;padding:28px 20px;}.fbot{flex-direction:column;gap:10px;padding:20px;}.status-bar{padding:10px 20px;}.sitems{gap:12px;}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
+</style>
+</head>
+<body>
+<div class="cursor" id="cursor"></div>
+<div class="cursor-ring" id="cursorRing"></div>
+<div class="bg-grid"></div>
+
+<nav id="nav">
+  <a href="/" class="nav-logo"><span class="nav-logo-hex"></span>ETHOSIFI</a>
+  <div class="nav-links">
+    <a href="#how">How It Works</a>
+    <a href="#modules">Modules</a>
+    <a href="#contracts">Contracts</a>
+    <a href="#pricing">Pricing</a>
+    <a href="https://ethosifi.xyz">Community Hub</a>
+  </div>
+  <a href="#" class="nav-cta" id="launchBtn" onclick="openModal();return false;">LAUNCH VAULT</a>
+</nav>
+
+<section class="hero">
+  <div class="hero-eyebrow">Ethereum Sepolia Testnet — 13 Contracts Live</div>
+  <h1 class="hero-title">
+    <span class="t1">THE</span><br>
+    <span class="t2">UNSTEALABLE</span><br>
+    <span class="t3">WALLET</span>
+  </h1>
+  <p class="hero-sub"><strong>Security enforced at the smart contract layer.</strong> Not the app layer. Not the interface. The contract itself blocks theft before it happens.</p>
+  <div class="hero-actions">
+    <a href="#" class="btn-primary" onclick="openModal();return false;">CREATE YOUR VAULT FREE</a>
+    <a href="#how" class="btn-secondary">SEE HOW IT WORKS</a>
+  </div>
+  <div class="hero-stats">
+    <div class="stat"><span class="stat-n">18</span><span class="stat-l">Security Modules</span></div>
+    <div class="stat"><span class="stat-n">$3.5B</span><span class="stat-l">Stolen Annually</span></div>
+    <div class="stat"><span class="stat-n">580M</span><span class="stat-l">Users At Risk</span></div>
+    <div class="stat"><span class="stat-n">$0</span><span class="stat-l">Stolen From Vaults</span></div>
+  </div>
+</section>
+
+<div class="ticker-wrap">
+  <div class="ticker" id="ticker">
+    <span class="tick-item"><span class="tick-dot"></span>Bybit Hack — $1.46B stolen — Feb 2025</span>
+    <span class="tick-item"><span class="tick-dot"></span>Radiant Capital — $50M drained via compromised signers</span>
+    <span class="tick-item"><span class="tick-dot"></span>WazirX Exchange — $235M lost in multisig exploit</span>
+    <span class="tick-item"><span class="tick-dot"></span>Phishing attacks up 156% year-over-year</span>
+    <span class="tick-item"><span class="tick-dot"></span>Deepfake scams targeting crypto executives — Q1 2025</span>
+    <span class="tick-item"><span class="tick-dot"></span>Ronin Network — $625M bridge exploit</span>
+    <span class="tick-item"><span class="tick-dot"></span>$68M lost to address poisoning attacks in 2024</span>
+    <span class="tick-item"><span class="tick-dot"></span>Bybit Hack — $1.46B stolen — Feb 2025</span>
+    <span class="tick-item"><span class="tick-dot"></span>Radiant Capital — $50M drained via compromised signers</span>
+    <span class="tick-item"><span class="tick-dot"></span>WazirX Exchange — $235M lost in multisig exploit</span>
+    <span class="tick-item"><span class="tick-dot"></span>Phishing attacks up 156% year-over-year</span>
+    <span class="tick-item"><span class="tick-dot"></span>Deepfake scams targeting crypto executives — Q1 2025</span>
+    <span class="tick-item"><span class="tick-dot"></span>Ronin Network — $625M bridge exploit</span>
+    <span class="tick-item"><span class="tick-dot"></span>$68M lost to address poisoning attacks in 2024</span>
+  </div>
+</div>
+
+<section class="problem" id="problem">
+  <div class="wrap">
+    <span class="stag fade-up">// The Problem</span>
+    <h2 class="stitle fade-up">Every wallet secures<br>the wrong layer.</h2>
+    <p class="ssub fade-up">Hardware wallets, seed phrases, 2FA — they all protect the interface. Hackers don't attack the interface. They attack what's underneath it.</p>
+    <div class="pgrid">
+      <div class="pcell fade-up"><span class="picon">🔑</span><div class="ptitle">SEED PHRASE THEFT</div><p class="ptext">One screenshot. One phishing link. One compromised device. Your entire wallet is gone forever. Seed phrases were designed in 2013. Hackers have had 12 years to master stealing them.</p><span class="pamount">$1.46B — Bybit, 2025</span></div>
+      <div class="pcell fade-up"><span class="picon">🤖</span><div class="ptitle">DEEPFAKE ATTACKS</div><p class="ptext">AI-generated video calls impersonating your CEO, your bank, your exchange support team. Users authorize transactions to attackers they genuinely believe are real people they trust.</p><span class="pamount">$25M — single deepfake CFO call</span></div>
+      <div class="pcell fade-up"><span class="picon">☠️</span><div class="ptitle">POISONED ADDRESSES</div><p class="ptext">Attackers send tiny transactions from addresses that look identical to yours at a glance. You copy the wrong one from your history. The transaction confirms. The money is gone forever.</p><span class="pamount">$68M — address poisoning, 2024</span></div>
+      <div class="pcell fade-up"><span class="picon">🕸️</span><div class="ptitle">SOCIAL ENGINEERING</div><p class="ptext">Fake support agents. Rug pulls disguised as yield. Malicious approvals buried in DeFi interactions. The attack surface is your own trust — and every competitor secures everything except that.</p><span class="pamount">$3.5B total stolen in 2024</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="how" id="how">
+  <div class="wrap">
+    <span class="stag fade-up">// How It Works</span>
+    <h2 class="stitle fade-up">Contract-layer security.<br>Not interface security.</h2>
+    <div class="how-grid">
+      <div class="steps">
+        <div class="step fade-up"><div class="snum">01</div><div><div class="stitle2">CONNECT YOUR WALLET</div><p class="stext">Connect MetaMask or any EVM wallet. No new accounts. No seed phrases. EthosiFi wraps your existing wallet with security enforced at the contract level.</p></div></div>
+        <div class="step fade-up"><div class="snum">02</div><div><div class="stitle2">DEPLOY YOUR VAULT</div><p class="stext">VaultFactory deploys a personal smart contract vault. It's yours permanently — no admin keys, no back doors. Rules are enforced by code, not by us.</p></div></div>
+        <div class="step fade-up"><div class="snum">03</div><div><div class="stitle2">CONFIGURE YOUR SECURITY</div><p class="stext">Activate any of the 18 security modules. Time locks. Guardian approval. Biometric confirmation. AI threat detection. Stack them exactly how you want.</p></div></div>
+        <div class="step fade-up"><div class="snum">04</div><div><div class="stitle2">TRANSACT WITH CONFIDENCE</div><p class="stext">Every outgoing transaction passes through your security stack automatically. Poisoned addresses get blocked. Suspicious amounts get delayed. Deepfake patterns get flagged. You never think about it.</p></div></div>
+      </div>
+      <div class="vault-vis">
+        <div class="vring vr1"></div>
+        <div class="vring vr2"></div>
+        <div class="vring vr3"></div>
+        <div class="vnode vn1">🕐</div>
+        <div class="vnode vn2">🛡️</div>
+        <div class="vnode vn3">🤖</div>
+        <div class="vnode vn4">👁️</div>
+        <div class="vnode vn5">🔐</div>
+        <div class="vnode vn6">⚡</div>
+        <div class="vnode vn7">🚨</div>
+        <div class="vnode vn8">🧊</div>
+        <div class="vcore"><span class="vcore-hex">⬡</span><span class="vcore-lbl">VAULT</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="modules" id="modules">
+  <div class="wrap">
+    <span class="stag fade-up">// Security Modules</span>
+    <h2 class="stitle fade-up">18 modules. Stack them.<br>Customize everything.</h2>
+    <p class="ssub fade-up">Every module is an independent smart contract on Ethereum Sepolia. Activate what you need. Each one enforces security at the transaction level — before funds move.</p>
+    <div class="mgrid">
+      <div class="mcard fade-up"><span class="micon">🕐</span><div class="mname">TIME LOCK VALIDATOR</div><p class="mdesc">Transactions above your threshold require a mandatory waiting period. Instant transfers become impossible — even if an attacker has your keys.</p><span class="mbadge">DEPLOYED ON SEPOLIA</span></div>
+      <div class="mcard fade-up"><span class="micon">👆</span><div class="mname">BIOMETRIC VALIDATOR</div><p class="mdesc">Transactions require biometric confirmation tied to the smart contract. A stolen password is never enough. Your fingerprint stays on your body.</p><span class="mbadge">DEPLOYED ON SEPOLIA</span></div>
+      <div class="mcard fade-up"><span class="micon">👥</span><div class="mname">GUARDIAN VALIDATOR</div><p class="mdesc">Designate trusted people who must approve high-value transactions. Social recovery without seed phrases. Your people, your rules.</p><span class="mbadge">DEPLOYED ON SEPOLIA</span></div>
+      <div class="mcard fade-up"><span class="micon">🧊</span><div class="mname">EMERGENCY FREEZE</div><p class="mdesc">One command locks your vault instantly. Nothing moves until you unfreeze it. Suspect compromise? Freeze first. Investigate second.</p><span class="mbadge">DEPLOYED ON SEPOLIA</span></div>
+      <div class="mcard fade-up"><span class="micon">☠️</span><div class="mname">POISONED ADDRESS PROTECTION</div><p class="mdesc">Screens every recipient against known attack patterns. Lookalike addresses get flagged before confirmation. Your clipboard can't betray you.</p><span class="mbadge">DEPLOYED ON SEPOLIA</span></div>
+      <div class="mcard fade-up"><span class="micon">🚨</span><div class="mname">ANTI-SCAM SCREENER</div><p class="mdesc">On-chain screening against known scam addresses, phishing contracts, and rug pull vectors. Updated continuously from community scam reports.</p><span class="mbadge">DEPLOYED ON SEPOLIA</span></div>
+      <div class="mcard fade-up"><span class="micon">📝</span><div class="mname">PLAIN ENGLISH EXECUTOR</div><p class="mdesc">Translates smart contract calls into human-readable descriptions before you sign. No more approving transactions you don't understand.</p><span class="mbadge">DEPLOYED ON SEPOLIA</span></div>
+      <div class="mcard fade-up"><span class="micon">🤖</span><div class="mname">AI THREAT ORACLE</div><p class="mdesc">ML model trained on historical attack patterns scores every transaction for threat probability before execution. Suspicious patterns blocked automatically.</p><span class="mbadge">DEPLOYED ON SEPOLIA</span></div>
+      <div class="mcard fade-up"><span class="micon">🎭</span><div class="mname">DEEPFAKE GUARD</div><p class="mdesc">Detects transaction patterns consistent with deepfake social engineering. Unusual destination, timing, and amount together? Flagged automatically.</p><span class="mbadge">DEPLOYED ON SEPOLIA</span></div>
+      <div class="mcard fade-up"><span class="micon">👴</span><div class="mname">SENIOR MODE VALIDATOR</div><p class="mdesc">Extended confirmation windows, simplified transaction language, and additional guardian checkpoints. Maximum safety for users who want it.</p><span class="mbadge">DEPLOYED ON SEPOLIA</span></div>
+      <div class="mcard fade-up"><span class="micon">⛽</span><div class="mname">PAYMASTER MANAGER</div><p class="mdesc">Gas abstraction layer enables gasless transactions for approved use cases. Pay fees in $ETHOS or have them sponsored by integrated dApps.</p><span class="mbadge">DEPLOYED ON SEPOLIA</span></div>
+      <div class="mcard fade-up"><span class="micon">🔒</span><div class="mname">MULTISIG UPGRADE GUARD</div><p class="mdesc">Any change to your vault's security requires multi-signature approval. Attackers can't silently downgrade your protection even with root access.</p><span class="mbadge">DEPLOYED ON SEPOLIA</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="contracts" id="contracts">
+  <div class="wrap">
+    <span class="stag fade-up">// On-Chain Verification</span>
+    <h2 class="stitle fade-up">Every contract deployed.<br>Every address public.</h2>
+    <p class="ssub fade-up">No trust required. Every EthosiFi contract is verified on Sepolia Etherscan. Read the code yourself. The security is in the contract, not our word.</p>
+    <div class="ctable fade-up">
+      <div class="cheader"><span>Contract</span><span>Sepolia Address</span><span>Status</span></div>
+      <div class="crow"><div class="cname">VaultFactory</div><div class="caddr"><a href="https://sepolia.etherscan.io/address/0x5347f042a50f54197f1add5c7700c7b1a315279e" target="_blank" rel="noopener">0x5347f042a50f54197f1add5c7700c7b1a315279e ↗</a></div><div class="cbadge">VERIFIED</div></div>
+      <div class="crow"><div class="cname">TimeLockValidator</div><div class="caddr"><a href="https://sepolia.etherscan.io/address/0x4f90fd954a8a811e60be95485986a2ebcb5569eb" target="_blank" rel="noopener">0x4f90fd954a8a811e60be95485986a2ebcb5569eb ↗</a></div><div class="cbadge">VERIFIED</div></div>
+      <div class="crow"><div class="cname">BiometricValidator</div><div class="caddr"><a href="https://sepolia.etherscan.io/address/0x1a4f082e6628dfff055feb73339add04a4121a06" target="_blank" rel="noopener">0x1a4f082e6628dfff055feb73339add04a4121a06 ↗</a></div><div class="cbadge">VERIFIED</div></div>
+      <div class="crow"><div class="cname">GuardianValidator</div><div class="caddr"><a href="https://sepolia.etherscan.io/address/0x0b12bf672d1e9494799457f6e67d4d19a24d8524" target="_blank" rel="noopener">0x0b12bf672d1e9494799457f6e67d4d19a24d8524 ↗</a></div><div class="cbadge">VERIFIED</div></div>
+      <div class="crow"><div class="cname">EmergencyFreeze</div><div class="caddr"><a href="https://sepolia.etherscan.io/address/0xa70679b3d903e649a0a81ef1b9878ee64996ecfd" target="_blank" rel="noopener">0xa70679b3d903e649a0a81ef1b9878ee64996ecfd ↗</a></div><div class="cbadge">VERIFIED</div></div>
+      <div class="crow"><div class="cname">PoisonedAddressProtection</div><div class="caddr"><a href="https://sepolia.etherscan.io/address/0x69f86ec2001a81723cd40af4ac4e399960ebe44e" target="_blank" rel="noopener">0x69f86ec2001a81723cd40af4ac4e399960ebe44e ↗</a></div><div class="cbadge">VERIFIED</div></div>
+      <div class="crow"><div class="cname">AntiScamScreener</div><div class="caddr"><a href="https://sepolia.etherscan.io/address/0xc690339fb8ca30a068cef5900664522e6fe57304" target="_blank" rel="noopener">0xc690339fb8ca30a068cef5900664522e6fe57304 ↗</a></div><div class="cbadge">VERIFIED</div></div>
+      <div class="crow"><div class="cname">PlainEnglishExecutor</div><div class="caddr"><a href="https://sepolia.etherscan.io/address/0x658a6021bd08c93074cb482116790a080d040677" target="_blank" rel="noopener">0x658a6021bd08c93074cb482116790a080d040677 ↗</a></div><div class="cbadge">VERIFIED</div></div>
+      <div class="crow"><div class="cname">AIThreatOracle</div><div class="caddr"><a href="https://sepolia.etherscan.io/address/0xa4403569592f43f221a44f5396425c47649e1d89" target="_blank" rel="noopener">0xa4403569592f43f221a44f5396425c47649e1d89 ↗</a></div><div class="cbadge">VERIFIED</div></div>
+      <div class="crow"><div class="cname">DeepfakeGuard</div><div class="caddr"><a href="https://sepolia.etherscan.io/address/0xf29c0b12d13edc5b2582fe97c4687e0a436417d3" target="_blank" rel="noopener">0xf29c0b12d13edc5b2582fe97c4687e0a436417d3 ↗</a></div><div class="cbadge">VERIFIED</div></div>
+      <div class="crow"><div class="cname">MultiSigUpgradeGuard</div><div class="caddr"><a href="https://sepolia.etherscan.io/address/0xb64561bd92fd46ef3fe0b6cc292eb1d0a6079743" target="_blank" rel="noopener">0xb64561bd92fd46ef3fe0b6cc292eb1d0a6079743 ↗</a></div><div class="cbadge">VERIFIED</div></div>
+      <div class="crow"><div class="cname">SeniorModeValidator</div><div class="caddr"><a href="https://sepolia.etherscan.io/address/0xc45604e53f9b52c35c6ae1b7d9feb646f9fc23e7" target="_blank" rel="noopener">0xc45604e53f9b52c35c6ae1b7d9feb646f9fc23e7 ↗</a></div><div class="cbadge">VERIFIED</div></div>
+      <div class="crow"><div class="cname">PaymasterManager</div><div class="caddr"><a href="https://sepolia.etherscan.io/address/0x465bc1002aa69ca6039ac43ae1fed27edbc9a2b4" target="_blank" rel="noopener">0x465bc1002aa69ca6039ac43ae1fed27edbc9a2b4 ↗</a></div><div class="cbadge">VERIFIED</div></div>
+    </div>
+  </div>
+</section>
+
+<section class="pricing" id="pricing">
+  <div class="wrap">
+    <span class="stag fade-up">// Pricing</span>
+    <h2 class="stitle fade-up">Security shouldn't cost more<br>than what you're protecting.</h2>
+    <div class="pgrid2">
+      <div class="pcard fade-up"><span class="ptier">Free</span><div class="pprice">$0<span>/mo</span></div><p class="pdesc2">10 transactions per month. Full security stack. No credit card required.</p><ul class="pfeats"><li>10 protected transactions/month</li><li>All 18 security modules</li><li>Emergency freeze</li><li>Poisoned address protection</li><li>Community Hub access</li></ul><a href="#" class="pbtn2" onclick="openModal();return false;">CREATE VAULT</a></div>
+      <div class="pcard feat fade-up"><span class="pbadge2">MOST POPULAR</span><span class="ptier">Pro</span><div class="pprice">$9.99<span>/mo</span></div><p class="pdesc2">Unlimited transactions. Priority AI threat detection. Full analytics.</p><ul class="pfeats"><li>Unlimited transactions</li><li>All 18 security modules</li><li>AI Threat Oracle priority</li><li>Guardian network (up to 5)</li><li>Transaction analytics dashboard</li><li>Email security alerts</li><li>Or burn 100 $ETHOS/month</li></ul><a href="#" class="pbtn2 fbtn" onclick="openModal();return false;">GO PRO</a></div>
+      <div class="pcard fade-up"><span class="ptier">MVP</span><div class="pprice">Free<span> w/ stake</span></div><p class="pdesc2">Hold 10,000 $ETHOS. Permanent Pro access + governance rights.</p><ul class="pfeats"><li>Everything in Pro — free forever</li><li>Soulbound NFT badge</li><li>$ETHOS governance voting</li><li>Early module access</li><li>Name in protocol credits</li></ul><a href="#" class="pbtn2" onclick="openModal();return false;">GET $ETHOS</a></div>
+      <div class="pcard fade-up"><span class="ptier">LP Provider</span><div class="pprice">Free<span> w/ LP</span></div><p class="pdesc2">Provide $500+ in liquidity. Earn LP rewards + permanent Pro.</p><ul class="pfeats"><li>Everything in Pro — free forever</li><li>Gold NFT liquidity badge</li><li>LP reward distributions</li><li>Protocol fee share</li><li>Governance multiplier (2x)</li></ul><a href="#" class="pbtn2" onclick="openModal();return false;">PROVIDE LIQUIDITY</a></div>
+    </div>
+  </div>
+</section>
+
+<section class="cta-sec">
+  <div class="wrap" style="position:relative;z-index:2;text-align:center;">
+    <span class="stag" style="justify-content:center;display:flex;">// Your Move</span>
+    <h2 class="cta-title fade-up">Stop hoping<br>your wallet is safe.</h2>
+    <p class="cta-sub fade-up">$3.5 billion was stolen from people who thought they were secure. EthosiFi makes theft structurally impossible — not just statistically unlikely.</p>
+    <a href="#" class="btn-primary fade-up" onclick="openModal();return false;" style="font-size:14px;padding:20px 56px;">CREATE YOUR VAULT — IT'S FREE</a>
+    <p class="cta-note fade-up">Currently on Ethereum Sepolia Testnet &nbsp;·&nbsp; Mainnet Q3 2026 &nbsp;·&nbsp; Audit In Progress</p>
+  </div>
+</section>
+
+<footer>
+  <div><a href="/" class="flogo">⬡ ETHOSIFI</a><p class="ftagline">The Unstealable Wallet.<br>Security at the contract layer.</p></div>
+  <div><div class="fctitle">PRODUCT</div><ul class="flinks"><li><a href="#how">How It Works</a></li><li><a href="#modules">Security Modules</a></li><li><a href="#contracts">Deployed Contracts</a></li><li><a href="#pricing">Pricing</a></li><li><a href="#" onclick="openModal();return false;">Create Vault</a></li></ul></div>
+  <div><div class="fctitle">COMMUNITY</div><ul class="flinks"><li><a href="https://ethosifi.xyz">Hub</a></li><li><a href="https://ethosifi.xyz/chat.html">Community Chat</a></li><li><a href="https://ethosifi.xyz/builders.html">Builders Board</a></li><li><a href="https://ethosifi.xyz/scam-report.html">Report a Scam</a></li><li><a href="https://ethosifi.xyz/security-academy.html">Security Academy</a></li></ul></div>
+  <div><div class="fctitle">RESOURCES</div><ul class="flinks"><li><a href="https://github.com/Founder-Trustforge/EthosiFi-Vault" target="_blank" rel="noopener">GitHub</a></li><li><a href="https://sepolia.etherscan.io/address/0x5347f042a50f54197f1add5c7700c7b1a315279e" target="_blank" rel="noopener">Etherscan</a></li><li><a href="https://ethosifi.xyz/governance.html">Governance</a></li><li><a href="https://ethosifi.xyz/investors.html">Investors</a></li><li><a href="https://ethosifi.xyz/protocol-status.html">Protocol Status</a></li></ul></div>
+</footer>
+<div class="fbot">
+  <span class="fbottxt">© 2026 EthosiFi. All rights reserved. BSL 1.1 License.</span>
+  <div class="netbadge"><div class="ndot"></div>ETHEREUM SEPOLIA · CHAIN ID 11155111</div>
+</div>
+
+<div class="status-bar">
+  <div class="sitems">
+    <div class="sitem"><div class="sg"></div>SEPOLIA NETWORK</div>
+    <div class="sitem"><div class="sc"></div>13 CONTRACTS LIVE</div>
+    <div class="sitem"><div class="sg"></div>AUDIT IN PROGRESS</div>
+  </div>
+  <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);">TESTNET · MAINNET Q3 2026</span>
+</div>
+
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <button class="mclose" onclick="closeModal()">✕</button>
+    <div class="mtitle">Connect Your Wallet</div>
+    <p class="msub">Connect your existing wallet to deploy your EthosiFi Vault. No new accounts. No seed phrases. Your wallet, wrapped with contract-layer security on Ethereum Sepolia.</p>
+    <div class="wopts">
+      <div class="wopt" onclick="connectWallet('metamask')"><span class="wopt-icon">🦊</span><div><div class="wopt-name">MetaMask</div><div class="wopt-desc">Connect using MetaMask browser extension</div></div></div>
+      <div class="wopt" onclick="connectWallet('walletconnect')"><span class="wopt-icon">🔗</span><div><div class="wopt-name">WalletConnect</div><div class="wopt-desc">Connect any mobile wallet via QR code — coming soon</div></div></div>
+      <div class="wopt" onclick="connectWallet('coinbase')"><span class="wopt-icon">🔵</span><div><div class="wopt-name">Coinbase Wallet</div><div class="wopt-desc">Connect using Coinbase Wallet — coming soon</div></div></div>
+    </div>
+    <div class="wnotice">Currently deployed on <strong style="color:var(--cyan)">Ethereum Sepolia Testnet</strong> (Chain ID: 11155111)<br>Make sure your wallet is connected to Sepolia before proceeding.<br>Need testnet ETH? <a href="https://ethosifi.xyz/faucet.html" style="color:var(--cyan)">Get it from our free faucet →</a></div>
+  </div>
+</div>
+
+<script>
+const cur=document.getElementById('cursor'),rng=document.getElementById('cursorRing');
+let mx=0,my=0,rx=0,ry=0;
+document.addEventListener('mousemove',e=>{mx=e.clientX;my=e.clientY;cur.style.left=mx+'px';cur.style.top=my+'px';});
+(function loop(){rx+=(mx-rx)*0.12;ry+=(my-ry)*0.12;rng.style.left=rx+'px';rng.style.top=ry+'px';requestAnimationFrame(loop);})();
+
+const obs=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible');});},{threshold:0.1,rootMargin:'0px 0px -50px 0px'});
+document.querySelectorAll('.fade-up').forEach(el=>obs.observe(el));
+
+window.addEventListener('scroll',()=>{document.getElementById('nav').style.background=window.scrollY>50?'rgba(0,3,8,0.99)':' rgba(0,3,8,0.92)';});
+
+function openModal(){document.getElementById('modal').classList.add('open');}
+function closeModal(){document.getElementById('modal').classList.remove('open');}
+document.getElementById('modal').addEventListener('click',e=>{if(e.target===document.getElementById('modal'))closeModal();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();});
+
+async function connectWallet(type){
+  if(type!=='metamask'){alert('WalletConnect and Coinbase Wallet launch with mainnet. MetaMask is fully supported now.');return;}
+  if(typeof window.ethereum==='undefined'){alert('MetaMask not detected. Please install MetaMask from metamask.io and try again.');return;}
+  try{
+    const accounts=await window.ethereum.request({method:'eth_requestAccounts'});
+    const chainId=await window.ethereum.request({method:'eth_chainId'});
+    if(chainId!=='0xaa36a7'){
+      try{await window.ethereum.request({method:'wallet_switchEthereumChain',params:[{chainId:'0xaa36a7'}]});}
+      catch(se){
+        if(se.code===4902){
+          await window.ethereum.request({method:'wallet_addEthereumChain',params:[{chainId:'0xaa36a7',chainName:'Sepolia Test Network',nativeCurrency:{name:'ETH',symbol:'ETH',decimals:18},rpcUrls:['https://rpc.sepolia.org'],blockExplorerUrls:['https://sepolia.etherscan.io']}]});
+        }
+      }
+    }
+    closeModal();
+    const short=accounts[0].slice(0,6)+'...'+accounts[0].slice(-4);
+    const btn=document.getElementById('launchBtn');
+    btn.textContent='VAULT: '+short;btn.onclick=null;
+    const banner=document.createElement('div');
+    banner.style.cssText='position:fixed;top:68px;left:0;right:0;z-index:999;background:rgba(0,255,136,0.07);border-bottom:1px solid rgba(0,255,136,0.2);padding:12px 48px;display:flex;align-items:center;justify-content:space-between;font-family:JetBrains Mono,monospace;font-size:12px;color:#00ff88;letter-spacing:1px;';
+    banner.innerHTML='<span>✅ CONNECTED: '+short+' · SEPOLIA TESTNET</span><a href="https://ethosifi.xyz/faucet.html" style="color:#00d4ff;text-decoration:none;font-size:11px;">Need testnet ETH? Free faucet →</a>';
+    document.body.appendChild(banner);
+    document.getElementById('how').scrollIntoView({behavior:'smooth'});
+  }catch(err){if(err.code!==4001)alert('Connection failed: '+err.message);}
+}
+</script>
+</body>
+</html>
