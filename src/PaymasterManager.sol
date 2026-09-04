@@ -37,6 +37,7 @@ contract PaymasterManager is IModule, ReentrancyGuard {
     event TierUpgraded(address indexed account, UserTier newTier);
     event FreeQuotaExhausted(address indexed account, uint256 month);
     event FeeTokenAdded(address indexed token, uint256 exchangeRate, string symbol);
+    event PoolWithdrawn(address indexed feeToken, uint256 amount);
     event OwnershipTransferStarted(address indexed prev, address indexed next);
     event OwnershipTransferred(address indexed prev, address indexed next);
     error NotOwner(); error NotEntryPoint(); error AlreadyInitialized(); error NotInitialized();
@@ -106,6 +107,24 @@ contract PaymasterManager is IModule, ReentrancyGuard {
         if (newTier > uint8(UserTier.ENTERPRISE)) revert InvalidTier(); configs[account].tier = UserTier(newTier); emit TierUpgraded(account, UserTier(newTier));
     }
     function depositToPool(address feeToken) external payable onlyOwner { paymasterPool[feeToken] += msg.value; }
+
+    /// @dev [RE-AUDIT FIX] Previously no function could withdraw pooled ETH — any amount
+    ///      deposited via depositToPool() was permanently locked with no recovery path.
+    ///      Not exploitable by an attacker, but a genuine fund-loss bug for the protocol
+    ///      itself. onlyOwner, CEI pattern, and a balance check against the actual
+    ///      contract ETH balance (not just the tracked mapping) to prevent over-withdrawal.
+    function withdrawFromPool(address feeToken, uint256 amount) external onlyOwner nonReentrant {
+        if (amount == 0) revert ZeroAmount();
+        if (paymasterPool[feeToken] < amount) revert InsufficientFeeBalance();
+        if (address(this).balance < amount) revert InsufficientFeeBalance();
+
+        paymasterPool[feeToken] -= amount;
+
+        (bool ok, ) = payable(owner).call{value: amount}("");
+        if (!ok) revert TransferFailed();
+
+        emit PoolWithdrawn(feeToken, amount);
+    }
     function transferOwnership(address newOwner) external onlyOwner { if (newOwner == address(0)) revert ZeroAddress(); pendingOwner = newOwner; emit OwnershipTransferStarted(owner, newOwner); }
     function acceptOwnership() external { if (msg.sender != pendingOwner) revert NotOwner(); emit OwnershipTransferred(owner, pendingOwner); owner = pendingOwner; pendingOwner = address(0); }
     function _refreshMonthlyQuota(PaymasterConfig storage config) internal { uint256 thisMonth = block.timestamp / 30 days; if (config.currentMonth < thisMonth) { config.currentMonth = thisMonth; config.monthlyTxCount = 0; } }
