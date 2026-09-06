@@ -31,6 +31,21 @@ import {IModule} from "erc7579/interfaces/IModule.sol";
  */
 contract AIThreatOracle is IModule {
 
+    /**
+     * @dev [CRIT-FIX 2026-09] addTrustedOracle() and updateGlobalScore() had zero
+     *      access control — any address could register itself as a trusted oracle,
+     *      then submit fabricated scores to make a malicious transaction score
+     *      GREEN (bypass) or a legitimate user's transaction score RED (denial of
+     *      service). Fixed with two-step onlyOwner governance below.
+     */
+    address public owner;
+    address public pendingOwner;
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "AIThreatOracle: not owner");
+        _;
+    }
+
     uint256 constant MODULE_TYPE_HOOK = 4;
 
     uint8 public constant SCORE_GREEN  = 30;
@@ -86,6 +101,14 @@ contract AIThreatOracle is IModule {
     event GuardianAlertTriggered(address indexed account, bytes32 indexed txHash, uint8 score);
     event BehaviorAnomalyDetected(address indexed account, string anomalyType);
     event OracleScoreSubmitted(address indexed oracle, bytes32 indexed txHash, uint8 score);
+    event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+    event TrustedOracleAdded(address indexed oracle);
+    event TrustedOracleRemoved(address indexed oracle);
+
+    constructor() {
+        owner = msg.sender;
+    }
 
     // ─────────────────────────────────────────────
     // Module Lifecycle
@@ -233,9 +256,15 @@ contract AIThreatOracle is IModule {
         globalRiskScores[target] = score;
     }
 
-    function addTrustedOracle(address oracle) external {
-        // Production: onlyGovernance
+    function addTrustedOracle(address oracle) external onlyOwner {
+        require(oracle != address(0), "Zero address");
         trustedOracles[oracle] = true;
+        emit TrustedOracleAdded(oracle);
+    }
+
+    function removeTrustedOracle(address oracle) external onlyOwner {
+        trustedOracles[oracle] = false;
+        emit TrustedOracleRemoved(oracle);
     }
 
     // ─────────────────────────────────────────────
@@ -346,6 +375,23 @@ contract AIThreatOracle is IModule {
         bytes memory buffer = new bytes(digits);
         while (value != 0) { digits--; buffer[digits] = bytes1(uint8(48 + value % 10)); value /= 10; }
         return string(buffer);
+    }
+
+    // ─────────────────────────────────────────────
+    // Ownership (two-step)
+    // ─────────────────────────────────────────────
+
+    function transferOwnership(address newOwner) external onlyOwner {
+        require(newOwner != address(0), "Zero address");
+        pendingOwner = newOwner;
+        emit OwnershipTransferStarted(owner, newOwner);
+    }
+
+    function acceptOwnership() external {
+        require(msg.sender == pendingOwner, "Not pending owner");
+        emit OwnershipTransferred(owner, pendingOwner);
+        owner = pendingOwner;
+        pendingOwner = address(0);
     }
 
     // ─────────────────────────────────────────────
