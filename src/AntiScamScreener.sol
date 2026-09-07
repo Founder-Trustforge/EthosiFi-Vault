@@ -168,7 +168,6 @@ contract AntiScamScreener is IModule {
      */
     // [CRIT-1 FIXED] onlyOwner
     function registerThreat(address target, ThreatLevel level, string calldata reason) external onlyOwner {
-        // Production: require governance multisig
         require(target != address(0), "Invalid target");
         require(level != ThreatLevel.SAFE, "Use removeThreat for safe");
 
@@ -204,7 +203,6 @@ contract AntiScamScreener is IModule {
 
     // [CRIT-1 FIXED] onlyOwner
     function removeThreat(address target, string calldata reason) external onlyOwner {
-        // Production: onlyGovernance
         threatRegistry[target].active = false;
         emit ThreatRemoved(target, reason);
     }
@@ -257,5 +255,4 @@ contract AntiScamScreener is IModule {
     function isInitialized(address account) external view returns (bool) {
         return configs[account].initialized;
     }
-
 }

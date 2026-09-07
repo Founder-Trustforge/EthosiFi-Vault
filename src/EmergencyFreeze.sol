@@ -140,12 +140,7 @@ contract EmergencyFreeze is IModule {
     /**
      * @notice Pre-execution hook. Blocks ALL transactions when vault is frozen.
      */
-    function preCheck(
-        address account,
-        address,
-        uint256,
-        bytes calldata
-    ) external view returns (bytes memory) {
+    function preCheck(address account, address, uint256, bytes calldata) external view returns (bytes memory) {
         FreezeConfig storage config = configs[account];
         if (!config.initialized) return "";
 
@@ -170,13 +165,11 @@ contract EmergencyFreeze is IModule {
         return configs[account].frozen;
     }
 
-    function getFreezeInfo(address account) external view returns (
-        bool frozen,
-        address frozenBy,
-        uint256 frozenAt,
-        uint256 unfreezeVotes,
-        uint256 unfreezeThreshold
-    ) {
+    function getFreezeInfo(address account)
+        external
+        view
+        returns (bool frozen, address frozenBy, uint256 frozenAt, uint256 unfreezeVotes, uint256 unfreezeThreshold)
+    {
         FreezeConfig storage config = configs[account];
         return (config.frozen, config.frozenBy, config.frozenAt, config.unfreezeVotes, config.unfreezeThreshold);
     }

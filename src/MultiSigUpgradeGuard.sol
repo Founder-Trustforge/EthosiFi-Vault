@@ -39,8 +39,12 @@ contract MultiSigUpgradeGuard is IModule {
 
     mapping(address => GuardConfig) public configs;
 
-    event UpgradeProposed(address indexed account, bytes32 indexed proposalId, address proposedModule, uint256 executeAfter);
-    event UpgradeApproved(address indexed account, bytes32 indexed proposalId, address guardian, uint256 totalApprovals);
+    event UpgradeProposed(
+        address indexed account, bytes32 indexed proposalId, address proposedModule, uint256 executeAfter
+    );
+    event UpgradeApproved(
+        address indexed account, bytes32 indexed proposalId, address guardian, uint256 totalApprovals
+    );
     event UpgradeExecuted(address indexed account, bytes32 indexed proposalId, address newModule);
     event UpgradeCancelled(address indexed account, bytes32 indexed proposalId, address cancelledBy);
     event UpgradeAttemptBlocked(address indexed account, address indexed attacker, address attemptedModule);
@@ -52,8 +56,7 @@ contract MultiSigUpgradeGuard is IModule {
     function onInstall(bytes calldata data) external {
         require(!configs[msg.sender].initialized, "Already initialized");
 
-        (address[] memory _guardians, uint256 _threshold) =
-            abi.decode(data, (address[], uint256));
+        (address[] memory _guardians, uint256 _threshold) = abi.decode(data, (address[], uint256));
 
         require(_guardians.length > 0, "Need guardians");
         require(_guardians.length <= MAX_GUARDIANS, "Too many guardians");
@@ -84,11 +87,10 @@ contract MultiSigUpgradeGuard is IModule {
      * @param newModule The new module contract address
      * @param moduleType The ERC-7579 module type being replaced
      */
-    function proposeUpgrade(
-        address account,
-        address newModule,
-        bytes4 moduleType
-    ) external returns (bytes32 proposalId) {
+    function proposeUpgrade(address account, address newModule, bytes4 moduleType)
+        external
+        returns (bytes32 proposalId)
+    {
         GuardConfig storage config = configs[account];
         require(config.initialized, "Not initialized");
         require(config.isGuardian[msg.sender], "Not a guardian");
@@ -170,19 +172,16 @@ contract MultiSigUpgradeGuard is IModule {
     /**
      * @notice Pre-execution hook. Detects and blocks unauthorized upgrade calls.
      */
-    function preCheck(
-        address account,
-        address target,
-        uint256,
-        bytes calldata callData
-    ) external returns (bytes memory) {
+    function preCheck(address account, address target, uint256, bytes calldata callData)
+        external
+        returns (bytes memory)
+    {
         // Detect installModule / uninstallModule selectors (ERC-7579)
         if (callData.length >= 4) {
             bytes4 selector = bytes4(callData[:4]);
-            bool isUpgradeCall = (
-                selector == bytes4(keccak256("installModule(uint256,address,bytes)")) ||
-                selector == bytes4(keccak256("uninstallModule(uint256,address,bytes)"))
-            );
+            bool isUpgradeCall =
+                (selector == bytes4(keccak256("installModule(uint256,address,bytes)"))
+                    || selector == bytes4(keccak256("uninstallModule(uint256,address,bytes)")));
 
             if (isUpgradeCall) {
                 GuardConfig storage config = configs[account];
@@ -203,14 +202,18 @@ contract MultiSigUpgradeGuard is IModule {
     // View Helpers
     // ─────────────────────────────────────────────
 
-    function getProposal(address account, bytes32 proposalId) external view returns (
-        address proposedModule,
-        uint256 proposedAt,
-        uint256 approvals,
-        bool executed,
-        bool cancelled,
-        bool delayElapsed
-    ) {
+    function getProposal(address account, bytes32 proposalId)
+        external
+        view
+        returns (
+            address proposedModule,
+            uint256 proposedAt,
+            uint256 approvals,
+            bool executed,
+            bool cancelled,
+            bool delayElapsed
+        )
+    {
         UpgradeProposal storage p = configs[account].proposals[proposalId];
         return (
             p.proposedModule,

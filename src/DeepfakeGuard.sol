@@ -250,10 +250,17 @@ contract DeepfakeGuard is IModule {
     }
 
     /**
-     * @notice Guardian can manually lift a cooloff after verifying the user is safe.
+     * @notice Lift a cooloff after verifying it is safe to proceed.
+     * @dev [CRIT-1 FIXED] Previously had NO access control — any address could call
+     *      liftCooloff() on any account, defeating the entire deepfake/social-engineering
+     *      protection by immediately clearing a cooldown triggered on a victim's account.
+     *      This GuardConfig has no guardian list, so the safe minimal fix is restricting
+     *      the call to the account itself (msg.sender == account). If guardian-assisted
+     *      lifting is needed, a guardian list must be added to GuardConfig first, with a
+     *      proper multi-guardian threshold vote — never a single unrestricted caller.
      */
     function liftCooloff(address account) external {
-        // Production: onlyGuardian
+        require(msg.sender == account, "DeepfakeGuard: only the account itself may lift its own cooloff");
         PressureProfile storage pressure = pressureProfiles[account];
         pressure.inCooloff = false;
         emit CooloffLifted(account);

@@ -73,8 +73,7 @@ contract PoisonedAddressProtection is IValidator {
     function onInstall(bytes calldata data) external {
         require(!configs[msg.sender].initialized, "Already initialized");
 
-        (bool strictMode, uint256 customThreshold, uint256 customWindow) =
-            abi.decode(data, (bool, uint256, uint256));
+        (bool strictMode, uint256 customThreshold, uint256 customWindow) = abi.decode(data, (bool, uint256, uint256));
 
         configs[msg.sender] = ProtectionConfig({
             initialized: true,
@@ -92,11 +91,10 @@ contract PoisonedAddressProtection is IValidator {
     // Core Validation
     // ─────────────────────────────────────────────
 
-    function validateUserOp(
-        PackedUserOperation calldata userOp,
-        bytes32 userOpHash,
-        uint256
-    ) external returns (uint256) {
+    function validateUserOp(PackedUserOperation calldata userOp, bytes32 userOpHash, uint256)
+        external
+        returns (uint256)
+    {
         ProtectionConfig storage config = configs[msg.sender];
         if (!config.initialized) return SIG_VALIDATION_SUCCESS;
 
@@ -112,7 +110,8 @@ contract PoisonedAddressProtection is IValidator {
         if (!config.strictMode && amount < config.threshold) return SIG_VALIDATION_SUCCESS;
 
         // Require pre-confirmation
-        bytes32 transferId = keccak256(abi.encodePacked(msg.sender, recipient, amount, block.timestamp / config.confirmationWindow));
+        bytes32 transferId =
+            keccak256(abi.encodePacked(msg.sender, recipient, amount, block.timestamp / config.confirmationWindow));
         PendingConfirmation storage pending = pendingConfirmations[msg.sender][transferId];
 
         if (!pending.confirmed) return SIG_VALIDATION_FAILED;
@@ -135,10 +134,7 @@ contract PoisonedAddressProtection is IValidator {
      * @param recipient The full recipient address (all 42 characters / 20 bytes)
      * @param amount The exact amount being transferred
      */
-    function confirmFullAddress(
-        address recipient,
-        uint256 amount
-    ) external returns (bytes32 transferId) {
+    function confirmFullAddress(address recipient, uint256 amount) external returns (bytes32 transferId) {
         require(configs[msg.sender].initialized, "Not initialized");
         require(recipient != address(0), "Invalid recipient");
 
@@ -156,10 +152,9 @@ contract PoisonedAddressProtection is IValidator {
             emit FirstTimeRecipientWarning(msg.sender, recipient);
         }
 
-        transferId = keccak256(abi.encodePacked(
-            msg.sender, recipient, amount,
-            block.timestamp / configs[msg.sender].confirmationWindow
-        ));
+        transferId = keccak256(
+            abi.encodePacked(msg.sender, recipient, amount, block.timestamp / configs[msg.sender].confirmationWindow)
+        );
 
         pendingConfirmations[msg.sender][transferId] = PendingConfirmation({
             fullAddressHash: keccak256(abi.encodePacked(recipient)),
@@ -223,12 +218,10 @@ contract PoisonedAddressProtection is IValidator {
      */
     // [CRIT-3 FIXED] onlyOwner — previously callable by anyone
     function flagPoisonedFingerprint(bytes8 fingerprint) external onlyOwner {
-        // Production: onlyOwner or governance
         knownPoisonPrefixSuffix[fingerprint] = true;
     }
 
     function unflagFingerprint(bytes8 fingerprint) external onlyOwner {
-        // Production: onlyOwner or governance
         knownPoisonPrefixSuffix[fingerprint] = false;
     }
 
@@ -257,12 +250,11 @@ contract PoisonedAddressProtection is IValidator {
     // View Helpers
     // ─────────────────────────────────────────────
 
-    function getAddressRecord(address account, address recipient) external view returns (
-        bool verified,
-        uint256 firstSeenAt,
-        uint256 lastUsedAt,
-        uint256 totalTransactions
-    ) {
+    function getAddressRecord(address account, address recipient)
+        external
+        view
+        returns (bool verified, uint256 firstSeenAt, uint256 lastUsedAt, uint256 totalTransactions)
+    {
         AddressRecord storage r = addressBook[account][recipient];
         return (r.verified, r.firstSeenAt, r.lastUsedAt, r.totalTransactions);
     }
@@ -274,9 +266,8 @@ contract PoisonedAddressProtection is IValidator {
     function isInitialized(address account) external view returns (bool) {
         return configs[account].initialized;
     }
-    function validateUserOp(PackedUserOperation calldata, bytes32) external returns (uint256) {
-        return 0;
-    }
+    // [CRIT-1 FIXED] Duplicate validateUserOp removed — it returned 0 unconditionally,
+    // bypassing all address-poisoning and confirmation checks.
 
     function isValidSignatureWithSender(address, bytes32, bytes calldata) external pure returns (bytes4) {
         return 0xffffffff;

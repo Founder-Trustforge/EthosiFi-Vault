@@ -40,8 +40,20 @@ contract EthosGovernance is ReentrancyGuard {
 
     // ─── Types ────────────────────────────────────────────────────────────────
 
-    enum ProposalCategory { FEATURE, CHAIN, THREAT, TREASURY, PARAMETER }
-    enum ProposalStatus { ACTIVE, PASSED, REJECTED, EXECUTED, CANCELLED }
+    enum ProposalCategory {
+        FEATURE,
+        CHAIN,
+        THREAT,
+        TREASURY,
+        PARAMETER
+    }
+    enum ProposalStatus {
+        ACTIVE,
+        PASSED,
+        REJECTED,
+        EXECUTED,
+        CANCELLED
+    }
 
     struct Proposal {
         uint256 id;
@@ -74,7 +86,9 @@ contract EthosGovernance is ReentrancyGuard {
 
     // ─── Events ───────────────────────────────────────────────────────────────
 
-    event ProposalCreated(uint256 indexed proposalId, address indexed proposer, string title, ProposalCategory category, uint256 endTime);
+    event ProposalCreated(
+        uint256 indexed proposalId, address indexed proposer, string title, ProposalCategory category, uint256 endTime
+    );
     event VoteCast(address indexed voter, uint256 indexed proposalId, bool support, uint256 votes);
     event ProposalPassed(uint256 indexed proposalId, uint256 votesFor, uint256 votesAgainst);
     event ProposalRejected(uint256 indexed proposalId, uint256 votesFor, uint256 votesAgainst);
@@ -112,7 +126,10 @@ contract EthosGovernance is ReentrancyGuard {
         owner = msg.sender;
     }
 
-    modifier onlyOwner() { if (msg.sender != owner) revert NotOwner(); _; }
+    modifier onlyOwner() {
+        if (msg.sender != owner) revert NotOwner();
+        _;
+    }
 
     // ─── Proposals ────────────────────────────────────────────────────────────
 
@@ -167,8 +184,8 @@ contract EthosGovernance is ReentrancyGuard {
         hasVoted[proposalId][msg.sender] = true;
         votesUsed[proposalId][msg.sender] = votes;
 
-        if (support) { p.votesFor += votes; }
-        else { p.votesAgainst += votes; }
+        if (support) p.votesFor += votes;
+        else p.votesAgainst += votes;
 
         emit VoteCast(msg.sender, proposalId, support, votes);
     }
@@ -276,7 +293,11 @@ contract EthosGovernance is ReentrancyGuard {
     }
 
     /// @dev [MED-2] Paginated to prevent unbounded gas usage.
-    function getActiveProposals(uint256 offset, uint256 limit) external view returns (uint256[] memory ids, uint256 total) {
+    function getActiveProposals(uint256 offset, uint256 limit)
+        external
+        view
+        returns (uint256[] memory ids, uint256 total)
+    {
         uint256[] memory temp = new uint256[](limit);
         uint256 count;
         for (uint256 i = offset + 1; i <= proposalCount && count < limit; i++) {
@@ -285,7 +306,9 @@ contract EthosGovernance is ReentrancyGuard {
             }
         }
         ids = new uint256[](count);
-        for (uint256 i = 0; i < count; i++) ids[i] = temp[i];
+        for (uint256 i = 0; i < count; i++) {
+            ids[i] = temp[i];
+        }
         total = proposalCount;
     }
 }

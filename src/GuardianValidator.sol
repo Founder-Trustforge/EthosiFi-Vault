@@ -100,17 +100,9 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
     // ─────────────────────────────────────────────────────────────
 
     event RecoveryInitiated(
-        address indexed account,
-        address indexed initiator,
-        bytes32 indexed newCredentialHash,
-        uint256 executeAfter
+        address indexed account, address indexed initiator, bytes32 indexed newCredentialHash, uint256 executeAfter
     );
-    event GuardianApproved(
-        address indexed account,
-        address indexed guardian,
-        uint256 weight,
-        uint256 totalWeight
-    );
+    event GuardianApproved(address indexed account, address indexed guardian, uint256 weight, uint256 totalWeight);
     event RecoveryExecuted(address indexed account, bytes32 indexed newCredentialHash);
     event RecoveryCancelled(address indexed account, address indexed cancelledBy);
     event GuardianAdded(address indexed account, address indexed guardian, uint256 weight);
@@ -155,8 +147,7 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
     function onInstall(bytes calldata data) external override {
         if (_configs[msg.sender].initialized) revert AlreadyInitialized();
 
-        (Guardian[] memory initialGuardians, uint256 _threshold) =
-            abi.decode(data, (Guardian[], uint256));
+        (Guardian[] memory initialGuardians, uint256 _threshold) = abi.decode(data, (Guardian[], uint256));
 
         if (initialGuardians.length == 0) revert InvalidGuardian();
         if (initialGuardians.length > MAX_GUARDIANS) revert TooManyGuardians();
@@ -185,11 +176,8 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
         // Threshold must be reachable
         require(totalWeight >= _threshold, "Threshold unreachable");
 
-        _configs[msg.sender] = AccountConfig({
-            initialized: true,
-            threshold: _threshold,
-            guardianCount: initialGuardians.length
-        });
+        _configs[msg.sender] =
+            AccountConfig({initialized: true, threshold: _threshold, guardianCount: initialGuardians.length});
     }
 
     /**
@@ -215,22 +203,14 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
      * It is a recovery-only module. Always returns FAILED.
      * The TimeLockValidator handles normal UserOp validation.
      */
-    function validateUserOp(
-        PackedUserOperation calldata,
-        bytes32,
-        uint256
-    ) external pure override returns (uint256) {
+    function validateUserOp(PackedUserOperation calldata, bytes32, uint256) external pure override returns (uint256) {
         return 1; // SIG_VALIDATION_FAILED — intentional
     }
 
     /**
      * @notice EIP-1271 — not supported by this module.
      */
-    function isValidSignatureWithSender(
-        address,
-        bytes32,
-        bytes calldata
-    ) external pure override returns (bytes4) {
+    function isValidSignatureWithSender(address, bytes32, bytes calldata) external pure override returns (bytes4) {
         return 0xffffffff;
     }
 
@@ -320,9 +300,7 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
         emit GuardianApproved(account, msg.sender, g.weight, req.totalWeight);
 
         // Auto-execute if threshold met AND delay elapsed
-        if (req.totalWeight >= cfg.threshold &&
-            block.timestamp >= req.initiatedAt + RECOVERY_DELAY)
-        {
+        if (req.totalWeight >= cfg.threshold && block.timestamp >= req.initiatedAt + RECOVERY_DELAY) {
             _executeRecovery(account);
         }
     }
@@ -375,11 +353,7 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
     /**
      * @notice Add a new guardian. Only callable by the account itself.
      */
-    function addGuardian(
-        address guardianAddr,
-        uint256 weight,
-        bytes32 identityHash
-    ) external {
+    function addGuardian(address guardianAddr, uint256 weight, bytes32 identityHash) external {
         AccountConfig storage cfg = _configs[msg.sender];
         if (!cfg.initialized) revert NotInitialized();
         if (guardianAddr == address(0)) revert ZeroAddress();
@@ -387,11 +361,8 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
         if (cfg.guardianCount >= MAX_GUARDIANS) revert TooManyGuardians();
         if (_guardians[msg.sender][guardianAddr].addr != address(0)) revert GuardianAlreadyExists();
 
-        _guardians[msg.sender][guardianAddr] = Guardian({
-            addr: guardianAddr,
-            weight: weight,
-            identityHash: identityHash
-        });
+        _guardians[msg.sender][guardianAddr] =
+            Guardian({addr: guardianAddr, weight: weight, identityHash: identityHash});
         _guardianList[msg.sender].push(guardianAddr);
         cfg.guardianCount++;
 
@@ -447,20 +418,20 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
     // View helpers
     // ─────────────────────────────────────────────────────────────
 
-    function getConfig(address account) external view returns (
-        bool initialized,
-        uint256 threshold,
-        uint256 guardianCount
-    ) {
+    function getConfig(address account)
+        external
+        view
+        returns (bool initialized, uint256 threshold, uint256 guardianCount)
+    {
         AccountConfig storage cfg = _configs[account];
         return (cfg.initialized, cfg.threshold, cfg.guardianCount);
     }
 
-    function getGuardian(address account, address guardianAddr) external view returns (
-        address addr,
-        uint256 weight,
-        bytes32 identityHash
-    ) {
+    function getGuardian(address account, address guardianAddr)
+        external
+        view
+        returns (address addr, uint256 weight, bytes32 identityHash)
+    {
         Guardian storage g = _guardians[account][guardianAddr];
         return (g.addr, g.weight, g.identityHash);
     }
@@ -469,16 +440,20 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
         return _guardianList[account];
     }
 
-    function getRecovery(address account) external view returns (
-        bytes32 newCredentialHash,
-        address newValidator,
-        uint256 initiatedAt,
-        uint256 executeAfter,
-        uint256 totalWeight,
-        bool executed,
-        bool cancelled,
-        address initiator
-    ) {
+    function getRecovery(address account)
+        external
+        view
+        returns (
+            bytes32 newCredentialHash,
+            address newValidator,
+            uint256 initiatedAt,
+            uint256 executeAfter,
+            uint256 totalWeight,
+            bool executed,
+            bool cancelled,
+            address initiator
+        )
+    {
         RecoveryRequest storage req = _recoveries[account];
         return (
             req.newCredentialHash,
@@ -498,9 +473,7 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
         return _approvals[account][initiatedAt][guardian];
     }
 
-    function getCooldownRemaining(address account, address guardian)
-        external view returns (uint256)
-    {
+    function getCooldownRemaining(address account, address guardian) external view returns (uint256) {
         uint256 last = _lastApproval[account][guardian];
         if (last == 0) return 0;
         uint256 unlockAt = last + APPROVAL_COOLDOWN;
@@ -564,36 +537,29 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
                 address(0), // current validator — account resolves this internally
                 ""
             );
-            bytes memory installCall = abi.encodeWithSignature(
-                "installModule(uint256,address,bytes)",
-                1,
-                newValidator,
-                installData
-            );
+            bytes memory installCall =
+                abi.encodeWithSignature("installModule(uint256,address,bytes)", 1, newValidator, installData);
 
             // Batch: [uninstall, install]
-            bytes memory batchData = abi.encode(
-                _buildExecution(account, 0, uninstallCall),
-                _buildExecution(account, 0, installCall)
-            );
+            bytes memory batchData =
+                abi.encode(_buildExecution(account, 0, uninstallCall), _buildExecution(account, 0, installCall));
 
-            IERC7579Account(account).executeFromExecutor(
-                0x01, // ModeCode: batch call
-                batchData
-            );
+            IERC7579Account(account)
+                .executeFromExecutor(
+                    0x01, // ModeCode: batch call
+                    batchData
+                );
         } else {
             // Credential-only rotation: call the existing validator module
             // to update the registered credential via a known selector.
             // The BiometricValidator must expose: rotateCredential(bytes32 credentialHash)
-            bytes memory rotateCall = abi.encodeWithSignature(
-                "rotateCredential(bytes32)",
-                credHash
-            );
+            bytes memory rotateCall = abi.encodeWithSignature("rotateCredential(bytes32)", credHash);
 
-            IERC7579Account(account).executeFromExecutor(
-                0x00, // ModeCode: single call
-                abi.encode(account, uint256(0), rotateCall)
-            );
+            IERC7579Account(account)
+                .executeFromExecutor(
+                    0x00, // ModeCode: single call
+                    abi.encode(account, uint256(0), rotateCall)
+                );
         }
     }
 
@@ -608,11 +574,11 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
         }
     }
 
-    function _buildExecution(
-        address target,
-        uint256 value,
-        bytes memory callData
-    ) internal pure returns (bytes memory) {
+    function _buildExecution(address target, uint256 value, bytes memory callData)
+        internal
+        pure
+        returns (bytes memory)
+    {
         return abi.encode(target, value, callData);
     }
 }

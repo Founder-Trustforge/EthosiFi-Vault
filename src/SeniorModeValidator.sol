@@ -121,11 +121,10 @@ contract SeniorModeValidator is IValidator {
     // Core Validation
     // ─────────────────────────────────────────────
 
-    function validateUserOp(
-        PackedUserOperation calldata userOp,
-        bytes32 userOpHash,
-        uint256
-    ) external returns (uint256) {
+    function validateUserOp(PackedUserOperation calldata userOp, bytes32 userOpHash, uint256)
+        external
+        returns (uint256)
+    {
         SeniorConfig storage config = configs[msg.sender];
         if (!config.initialized || !config.seniorModeActive) return SIG_VALIDATION_SUCCESS;
 
@@ -240,9 +239,11 @@ contract SeniorModeValidator is IValidator {
         return (address(bytes20(callData[16:36])), uint256(bytes32(callData[36:68])));
     }
 
-    function getConfig(address account) external view returns (
-        bool active, uint256 dailyLimit, uint256 txLimit, uint256 allowedStart, uint256 allowedEnd
-    ) {
+    function getConfig(address account)
+        external
+        view
+        returns (bool active, uint256 dailyLimit, uint256 txLimit, uint256 allowedStart, uint256 allowedEnd)
+    {
         SeniorConfig storage c = configs[account];
         return (c.seniorModeActive, c.dailyLimit, c.txLimit, c.blockStartHour, c.blockEndHour);
     }
@@ -262,9 +263,8 @@ contract SeniorModeValidator is IValidator {
     function isInitialized(address account) external view returns (bool) {
         return configs[account].initialized;
     }
-    function validateUserOp(PackedUserOperation calldata, bytes32) external returns (uint256) {
-        return 0;
-    }
+    // [CRIT-1 FIXED] Duplicate validateUserOp removed — it returned 0 unconditionally,
+    // bypassing all daily spend limits, guardian checks, and time-of-day restrictions.
 
     function isValidSignatureWithSender(address, bytes32, bytes calldata) external pure returns (bytes4) {
         return 0xffffffff;

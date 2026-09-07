@@ -16,7 +16,7 @@ pragma solidity ^0.8.23;
 contract EthosMVPBadge {
     // ─── STATE ───────────────────────────────────────────────────────────────
 
-    string public constant name   = "EthosiFi MVP Badge";
+    string public constant name = "EthosiFi MVP Badge";
     string public constant symbol = "ETHOS-MVP";
 
     address public owner;
@@ -93,18 +93,22 @@ contract EthosMVPBadge {
 
         // On-chain SVG metadata - no IPFS dependency
         if (badge.tier == TIER_LP) {
-            return string(abi.encodePacked(
-                'data:application/json;utf8,{"name":"EthosiFi LP Badge","description":"EthosiFi Vault LP Provider - Gold Tier MVP","image":"data:image/svg+xml;utf8,',
-                _goldBadgeSVG(),
-                '","attributes":[{"trait_type":"Tier","value":"LP Provider"},{"trait_type":"Status","value":"Active"}]}'
-            ));
+            return string(
+                abi.encodePacked(
+                    'data:application/json;utf8,{"name":"EthosiFi LP Badge","description":"EthosiFi Vault LP Provider - Gold Tier MVP","image":"data:image/svg+xml;utf8,',
+                    _goldBadgeSVG(),
+                    '","attributes":[{"trait_type":"Tier","value":"LP Provider"},{"trait_type":"Status","value":"Active"}]}'
+                )
+            );
         }
 
-        return string(abi.encodePacked(
-            'data:application/json;utf8,{"name":"EthosiFi MVP Badge","description":"EthosiFi Vault MVP Member - Security Protocol Stakeholder","image":"data:image/svg+xml;utf8,',
-            _mvpBadgeSVG(),
-            '","attributes":[{"trait_type":"Tier","value":"MVP"},{"trait_type":"Status","value":"Active"}]}'
-        ));
+        return string(
+            abi.encodePacked(
+                'data:application/json;utf8,{"name":"EthosiFi MVP Badge","description":"EthosiFi Vault MVP Member - Security Protocol Stakeholder","image":"data:image/svg+xml;utf8,',
+                _mvpBadgeSVG(),
+                '","attributes":[{"trait_type":"Tier","value":"MVP"},{"trait_type":"Status","value":"Active"}]}'
+            )
+        );
     }
 
     // ─── SOULBOUND: BLOCK TRANSFERS ──────────────────────────────────────────
@@ -144,11 +148,7 @@ contract EthosMVPBadge {
 
         uint256 tokenId = _tokenIdCounter++;
 
-        badges[tokenId] = Badge({
-            tier: tier,
-            mintedAt: block.timestamp,
-            active: true
-        });
+        badges[tokenId] = Badge({tier: tier, mintedAt: block.timestamp, active: true});
 
         tokenOwner[tokenId] = to;
         holderToken[to] = tokenId;
@@ -222,11 +222,11 @@ contract EthosMVPBadge {
     // ─── SVG GENERATION ──────────────────────────────────────────────────────
 
     function _mvpBadgeSVG() internal pure returns (string memory) {
-        return '<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 200 200%22><rect width=%22200%22 height=%22200%22 rx=%2220%22 fill=%22%231A1A2E%22/><circle cx=%22100%22 cy=%2270%22 r=%2240%22 fill=%22none%22 stroke=%220F3460%22 stroke-width=%223%22/><text x=%22100%22 y=%2278%22 text-anchor=%22middle%22 font-size=%2228%22 fill=%220F3460%22 font-family=%22Arial%22>E</text><text x=%22100%22 y=%22130%22 text-anchor=%22middle%22 font-size=%2214%22 fill=%22white%22 font-family=%22Arial%22>EthosiFi MVP</text><text x=%22100%22 y=%22150%22 text-anchor=%22middle%22 font-size=%2210%22 fill=%22666666%22 font-family=%22Arial%22>Vault Security Member</text></svg>';
+        return "<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 200 200%22><rect width=%22200%22 height=%22200%22 rx=%2220%22 fill=%22%231A1A2E%22/><circle cx=%22100%22 cy=%2270%22 r=%2240%22 fill=%22none%22 stroke=%220F3460%22 stroke-width=%223%22/><text x=%22100%22 y=%2278%22 text-anchor=%22middle%22 font-size=%2228%22 fill=%220F3460%22 font-family=%22Arial%22>E</text><text x=%22100%22 y=%22130%22 text-anchor=%22middle%22 font-size=%2214%22 fill=%22white%22 font-family=%22Arial%22>EthosiFi MVP</text><text x=%22100%22 y=%22150%22 text-anchor=%22middle%22 font-size=%2210%22 fill=%22666666%22 font-family=%22Arial%22>Vault Security Member</text></svg>";
     }
 
     function _goldBadgeSVG() internal pure returns (string memory) {
-        return '<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 200 200%22><rect width=%22200%22 height=%22200%22 rx=%2220%22 fill=%22%231A1A2E%22/><circle cx=%22100%22 cy=%2270%22 r=%2240%22 fill=%22none%22 stroke=%22FFD700%22 stroke-width=%223%22/><text x=%22100%22 y=%2278%22 text-anchor=%22middle%22 font-size=%2228%22 fill=%22FFD700%22 font-family=%22Arial%22>E</text><text x=%22100%22 y=%22130%22 text-anchor=%22middle%22 font-size=%2214%22 fill=%22FFD700%22 font-family=%22Arial%22>EthosiFi LP Gold</text><text x=%22100%22 y=%22150%22 text-anchor=%22middle%22 font-size=%2210%22 fill=%22666666%22 font-family=%22Arial%22>Liquidity Provider</text></svg>';
+        return "<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 200 200%22><rect width=%22200%22 height=%22200%22 rx=%2220%22 fill=%22%231A1A2E%22/><circle cx=%22100%22 cy=%2270%22 r=%2240%22 fill=%22none%22 stroke=%22FFD700%22 stroke-width=%223%22/><text x=%22100%22 y=%2278%22 text-anchor=%22middle%22 font-size=%2228%22 fill=%22FFD700%22 font-family=%22Arial%22>E</text><text x=%22100%22 y=%22130%22 text-anchor=%22middle%22 font-size=%2214%22 fill=%22FFD700%22 font-family=%22Arial%22>EthosiFi LP Gold</text><text x=%22100%22 y=%22150%22 text-anchor=%22middle%22 font-size=%2210%22 fill=%22666666%22 font-family=%22Arial%22>Liquidity Provider</text></svg>";
     }
 
     // ─── OWNER FUNCTIONS ─────────────────────────────────────────────────────
