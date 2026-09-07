@@ -17,7 +17,7 @@ import {IModule} from "erc7579/interfaces/IModule.sol";
  *        - Cross-chain threat intelligence correlation
  *
  *      Score thresholds (configurable per user):
- *        0–30:  GREEN  — Execute normally
+ *        0–30: GREEN  — Execute normally
  *        31–60: YELLOW — Warn user, add confirmation step
  *        61–85: ORANGE — Require guardian notification
  *        86–100: RED   — Block transaction automatically
@@ -48,27 +48,27 @@ contract AIThreatOracle is IModule {
 
     uint256 constant MODULE_TYPE_HOOK = 4;
 
-    uint8 public constant SCORE_GREEN  = 30;
+    uint8 public constant SCORE_GREEN = 30;
     uint8 public constant SCORE_YELLOW = 60;
     uint8 public constant SCORE_ORANGE = 85;
-    uint8 public constant SCORE_RED    = 86;  // Block threshold
+    uint8 public constant SCORE_RED = 86;  // Block threshold
 
     enum RiskColor { GREEN, YELLOW, ORANGE, RED }
 
     struct OracleConfig {
-        bool  initialized;
+        bool initialized;
         uint8 blockThreshold;       // Default: 86 (RED)
         uint8 guardianAlertThreshold; // Default: 61 (ORANGE)
-        bool  requireScoreForAll;   // Require AI score for all transactions
+        bool requireScoreForAll;   // Require AI score for all transactions
         address trustedOracle;      // EthosiFi oracle address
     }
 
     struct ThreatScore {
-        uint8   score;              // 0–100
-        string  reasoning;          // AI plain-English explanation
+        uint8 score;              // 0–100
+        string reasoning;          // AI plain-English explanation
         uint256 scoredAt;           // Timestamp
         bytes32 txHash;             // Transaction being scored
-        bool    valid;
+        bool valid;
         RiskColor color;
     }
 
@@ -121,11 +121,11 @@ contract AIThreatOracle is IModule {
             abi.decode(data, (uint8, uint8, bool, address));
 
         configs[msg.sender] = OracleConfig({
-            initialized:             true,
-            blockThreshold:          blockThreshold > 0 ? blockThreshold : SCORE_RED,
-            guardianAlertThreshold:  alertThreshold > 0 ? alertThreshold : SCORE_ORANGE + 1,
-            requireScoreForAll:      requireScoreForAll,
-            trustedOracle:           oracle
+            initialized: true,
+            blockThreshold: blockThreshold > 0 ? blockThreshold : SCORE_RED,
+            guardianAlertThreshold: alertThreshold > 0 ? alertThreshold : SCORE_ORANGE + 1,
+            requireScoreForAll: requireScoreForAll,
+            trustedOracle: oracle
         });
     }
 
@@ -161,11 +161,11 @@ contract AIThreatOracle is IModule {
         if (existingScore.valid && block.timestamp <= existingScore.scoredAt + 5 minutes) {
             // Use oracle-submitted score
             finalScore = existingScore.score;
-            reasoning  = existingScore.reasoning;
+            reasoning = existingScore.reasoning;
         } else if (globalScore > 0) {
             // Use global AI score for this address
             finalScore = globalScore;
-            reasoning  = "Global AI threat intelligence score.";
+            reasoning = "Global AI threat intelligence score.";
         } else {
             // Fallback: behavioral heuristics
             (finalScore, reasoning) = _heuristicScore(account, target, value, callData);
@@ -178,12 +178,12 @@ contract AIThreatOracle is IModule {
 
         // Store score
         scores[account][txHash] = ThreatScore({
-            score:     finalScore,
+            score: finalScore,
             reasoning: reasoning,
-            scoredAt:  block.timestamp,
-            txHash:    txHash,
-            valid:     true,
-            color:     color
+            scoredAt: block.timestamp,
+            txHash: txHash,
+            valid: true,
+            color: color
         });
 
         emit TransactionScored(account, txHash, finalScore, color, reasoning);
@@ -237,12 +237,12 @@ contract AIThreatOracle is IModule {
         RiskColor color = _getColor(score);
 
         scores[account][txHash] = ThreatScore({
-            score:     score,
+            score: score,
             reasoning: reasoning,
-            scoredAt:  block.timestamp,
-            txHash:    txHash,
-            valid:     true,
-            color:     color
+            scoredAt: block.timestamp,
+            txHash: txHash,
+            valid: true,
+            color: color
         });
 
         emit OracleScoreSubmitted(msg.sender, txHash, score);
@@ -351,7 +351,7 @@ contract AIThreatOracle is IModule {
     }
 
     function _getColor(uint8 score) internal pure returns (RiskColor) {
-        if (score <= SCORE_GREEN)  return RiskColor.GREEN;
+        if (score <= SCORE_GREEN) return RiskColor.GREEN;
         if (score <= SCORE_YELLOW) return RiskColor.YELLOW;
         if (score <= SCORE_ORANGE) return RiskColor.ORANGE;
         return RiskColor.RED;
