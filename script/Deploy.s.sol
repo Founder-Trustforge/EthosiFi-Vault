@@ -17,7 +17,6 @@ import "../src/PaymasterManager.sol";
 import "../src/VaultFactory.sol";
 
 contract DeployScript is Script {
-
     address constant ENTRY_POINT_V07 = 0x0000000071727De22E5E9d8BAf0edAc6f37da032;
 
     struct Addresses {
@@ -54,22 +53,22 @@ contract DeployScript is Script {
         Addresses memory addrs;
 
         console.log("\n[1/4] Core Security...");
-        addrs.timeLockValidator    = address(new TimeLockValidator());
-        addrs.biometricValidator   = address(new BiometricValidator());
-        addrs.guardianValidator    = address(new GuardianValidator());
-        addrs.emergencyFreeze      = address(new EmergencyFreeze());
+        addrs.timeLockValidator = address(new TimeLockValidator());
+        addrs.biometricValidator = address(new BiometricValidator());
+        addrs.guardianValidator = address(new GuardianValidator());
+        addrs.emergencyFreeze = address(new EmergencyFreeze());
         addrs.multiSigUpgradeGuard = address(new MultiSigUpgradeGuard());
 
         console.log("\n[2/4] User Protection...");
         addrs.poisonedAddressProtection = address(new PoisonedAddressProtection());
-        addrs.antiScamScreener          = address(new AntiScamScreener());
-        addrs.plainEnglishExecutor      = address(new PlainEnglishExecutor());
-        addrs.aiThreatOracle            = address(new AIThreatOracle());
-        addrs.deepfakeGuard             = address(new DeepfakeGuard());
+        addrs.antiScamScreener = address(new AntiScamScreener());
+        addrs.plainEnglishExecutor = address(new PlainEnglishExecutor());
+        addrs.aiThreatOracle = address(new AIThreatOracle());
+        addrs.deepfakeGuard = address(new DeepfakeGuard());
 
         console.log("\n[3/4] UX & Accessibility...");
         addrs.seniorModeValidator = address(new SeniorModeValidator());
-        addrs.paymasterManager    = address(new PaymasterManager());
+        addrs.paymasterManager = address(new PaymasterManager());
 
         console.log("\n[4/4] Infrastructure...");
         VaultFactory factory = new VaultFactory(entryPoint);
