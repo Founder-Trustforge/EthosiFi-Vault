@@ -8,44 +8,43 @@ import {IModule} from "erc7579/interfaces/IModule.sol";
  * @title DeepfakeGuard
  * @notice EthosiFi Vault — Defends against AI-powered social engineering attacks.
  * @dev Deepfake voice phishing rose 1,633% in Q1 2025.
- *      Attackers impersonate trusted contacts, family members, or support staff
- *      via AI-generated voice/video to pressure victims into approving transactions.
+ * Attackers impersonate trusted contacts, family members, or support staff
+ * via AI-generated voice/video to pressure victims into approving transactions.
  *
- *      This contract adds a timed cryptographic challenge for large transfers.
- *      The challenge requires a unique, time-sensitive response that:
- *        - Cannot be pre-computed by an attacker
- *        - Cannot be auto-passed by a bot or deepfake
- *        - Requires the actual vault owner to be present and responsive
- *        - Expires in a short window (prevents replay)
+ * This contract adds a timed cryptographic challenge for large transfers.
+ * The challenge requires a unique, time-sensitive response that:
+ * - Cannot be pre-computed by an attacker
+ * - Cannot be auto-passed by a bot or deepfake
+ * - Requires the actual vault owner to be present and responsive
+ * - Expires in a short window (prevents replay)
  *
  *      Additionally: enforces a "cooling off" check — if the user's behavior
- *      indicates social pressure (e.g., multiple rapid attempts on large transfers),
- *      the vault enters a voluntary protection mode.
+ * indicates social pressure (e.g., multiple rapid attempts on large transfers),
+ * the vault enters a voluntary protection mode.
  *
  * Layer: User Protection (Pillar 5)
  */
 contract DeepfakeGuard is IModule {
-
     uint256 constant MODULE_TYPE_HOOK = 4;
 
-    uint256 public constant CHALLENGE_EXPIRY     = 3 minutes;    // Challenge must be answered in 3 min
-    uint256 public constant COOLOFF_THRESHOLD    = 3;            // Rapid attempts before cooloff
-    uint256 public constant COOLOFF_PERIOD       = 30 minutes;   // Mandatory cooloff duration
-    uint256 public constant DEFAULT_VALUE_TRIGGER = 1000 * 1e6;  // Challenges required above $1,000
+    uint256 public constant CHALLENGE_EXPIRY = 3 minutes; // Challenge must be answered in 3 min
+    uint256 public constant COOLOFF_THRESHOLD = 3; // Rapid attempts before cooloff
+    uint256 public constant COOLOFF_PERIOD = 30 minutes; // Mandatory cooloff duration
+    uint256 public constant DEFAULT_VALUE_TRIGGER = 1000 * 1e6; // Challenges required above $1,000
 
     struct GuardConfig {
-        bool    initialized;
-        uint256 valueTrigger;        // Challenge required above this amount
-        bool    alwaysChallenge;     // Challenge ALL transactions (maximum protection)
-        uint256 rapidAttemptWindow;  // Window to detect rapid attempts (seconds)
+        bool initialized;
+        uint256 valueTrigger; // Challenge required above this amount
+        bool alwaysChallenge; // Challenge ALL transactions (maximum protection)
+        uint256 rapidAttemptWindow; // Window to detect rapid attempts (seconds)
     }
 
     struct Challenge {
-        bytes32 challengeHash;      // keccak256(secret + nonce + timestamp)
+        bytes32 challengeHash; // keccak256(secret + nonce + timestamp)
         uint256 issuedAt;
         uint256 expiresAt;
-        bool    answered;
-        bool    passed;
+        bool answered;
+        bool passed;
         uint256 amount;
         address recipient;
     }
@@ -54,7 +53,7 @@ contract DeepfakeGuard is IModule {
         uint256 attemptCount;
         uint256 firstAttemptAt;
         uint256 lastAttemptAt;
-        bool    inCooloff;
+        bool inCooloff;
         uint256 cooloffUntil;
     }
 
@@ -83,9 +82,9 @@ contract DeepfakeGuard is IModule {
             abi.decode(data, (uint256, bool, uint256));
 
         configs[msg.sender] = GuardConfig({
-            initialized:        true,
-            valueTrigger:       valueTrigger > 0 ? valueTrigger : DEFAULT_VALUE_TRIGGER,
-            alwaysChallenge:    alwaysChallenge,
+            initialized: true,
+            valueTrigger: valueTrigger > 0 ? valueTrigger : DEFAULT_VALUE_TRIGGER,
+            alwaysChallenge: alwaysChallenge,
             rapidAttemptWindow: rapidAttemptWindow > 0 ? rapidAttemptWindow : 10 minutes
         });
     }
@@ -150,14 +149,14 @@ contract DeepfakeGuard is IModule {
 
     /**
      * @notice Request a challenge before a large transfer.
-     *         The frontend generates a unique, time-sensitive puzzle.
-     *         The user must solve it in person — no bot can auto-pass.
+     * The frontend generates a unique, time-sensitive puzzle.
+     * The user must solve it in person — no bot can auto-pass.
      *
      * @param recipient The intended recipient
-     * @param amount    The intended amount
+     * @param amount The intended amount
      * @param puzzleAnswer A hash of the user's answer to the UI-displayed puzzle
      *        (e.g., "type the 3rd and 7th word of your vault's creation phrase" —
-     *         words are displayed on-screen, never stored, and rotate every session)
+     * words are displayed on-screen, never stored, and rotate every session)
      */
     function requestChallenge(
         address recipient,
@@ -178,12 +177,12 @@ contract DeepfakeGuard is IModule {
         // Only the person physically present with the device can answer correctly
         challenges[msg.sender][challengeId] = Challenge({
             challengeHash: keccak256(abi.encodePacked(puzzleAnswer, nonce, block.timestamp / CHALLENGE_EXPIRY)),
-            issuedAt:      block.timestamp,
-            expiresAt:     block.timestamp + CHALLENGE_EXPIRY,
-            answered:      false,
-            passed:        false,
-            amount:        amount,
-            recipient:     recipient
+            issuedAt: block.timestamp,
+            expiresAt: block.timestamp + CHALLENGE_EXPIRY,
+            answered: false,
+            passed: false,
+            amount: amount,
+            recipient: recipient
         });
 
         emit ChallengeIssued(msg.sender, challengeId, block.timestamp + CHALLENGE_EXPIRY, amount);
@@ -191,7 +190,7 @@ contract DeepfakeGuard is IModule {
 
     /**
      * @notice Submit the answer to a challenge.
-     * @param challengeId   The challenge to answer
+     * @param challengeId The challenge to answer
      * @param answer        The user's response (hashed with nonce on frontend)
      */
     function answerChallenge(
@@ -233,7 +232,7 @@ contract DeepfakeGuard is IModule {
 
         // Reset window if too old
         if (block.timestamp > pressure.firstAttemptAt + config.rapidAttemptWindow) {
-            pressure.attemptCount  = 0;
+            pressure.attemptCount = 0;
             pressure.firstAttemptAt = block.timestamp;
         }
 
@@ -244,7 +243,7 @@ contract DeepfakeGuard is IModule {
 
         // Trigger cooloff if too many rapid attempts
         if (pressure.attemptCount >= COOLOFF_THRESHOLD) {
-            pressure.inCooloff   = true;
+            pressure.inCooloff = true;
             pressure.cooloffUntil = block.timestamp + COOLOFF_PERIOD;
             emit CooloffActivated(account, pressure.cooloffUntil);
         }
@@ -296,7 +295,4 @@ contract DeepfakeGuard is IModule {
     function isInitialized(address account) external view returns (bool) {
         return configs[account].initialized;
     }
-
-
-
 }

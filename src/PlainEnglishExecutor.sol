@@ -5,24 +5,23 @@ import {IModule} from "erc7579/interfaces/IModule.sol";
 import {ReentrancyGuard} from "solady/utils/ReentrancyGuard.sol";
 
 /**
- * @title  PlainEnglishExecutor
+ * @title PlainEnglishExecutor
  * @notice EthosiFi Vault — translates every transaction into human language before signing.
  *
- * @dev    SECURITY FIXES (2026-08 audit):
- *         [CRIT-1] labelContract() and batchLabelContracts() were callable by ANY address.
+ * @dev SECURITY FIXES (2026-08 audit):
+ * [CRIT-1] labelContract() and batchLabelContracts() were callable by ANY address.
  *                  An attacker could label their own malicious contract as "Uniswap V3 Router"
  *                  or "USDC Token", causing the plain English summary to describe a safe
  *                  operation when the actual transaction drains the user's wallet.
- *                  Fixed: only the contract owner (EthosiFi governance) can label contracts.
- *         [MED-1]  batchLabelContracts() had no upper bound — DoS vector. Capped at 200.
- *         [MED-2]  Two-step ownership added.
- *         [MED-3]  ReentrancyGuard applied.
+ * Fixed: only the contract owner (EthosiFi governance) can label contracts.
+ * [MED-1] batchLabelContracts() had no upper bound — DoS vector. Capped at 200.
+ * [MED-2] Two-step ownership added.
+ * [MED-3] ReentrancyGuard applied.
  */
 contract PlainEnglishExecutor is IModule, ReentrancyGuard {
-
     uint256 private constant MODULE_TYPE_HOOK = 4;
-    uint256 public  constant CONFIRMATION_EXPIRY   = 10 minutes;
-    uint256 public  constant BATCH_LABEL_LIMIT     = 200;
+    uint256 public constant CONFIRMATION_EXPIRY = 10 minutes;
+    uint256 public constant BATCH_LABEL_LIMIT = 200;
 
     // ─── Access control ───────────────────────────────────────────────────────
 
@@ -49,21 +48,21 @@ contract PlainEnglishExecutor is IModule, ReentrancyGuard {
     }
 
     struct TransactionSummary {
-        string    plainEnglish;
-        bytes32   calldataHash;
-        uint256   createdAt;
-        bool      confirmed;
-        uint256   confirmedAt;
+        string plainEnglish;
+        bytes32 calldataHash;
+        uint256 createdAt;
+        bool confirmed;
+        uint256 confirmedAt;
         RiskLevel riskLevel;
     }
 
     // ─── Storage ──────────────────────────────────────────────────────────────
 
-    mapping(address => ExecutorConfig)                                   public configs;
-    mapping(address => mapping(bytes32 => TransactionSummary))           public summaries;
+    mapping(address => ExecutorConfig) public configs;
+    mapping(address => mapping(bytes32 => TransactionSummary)) public summaries;
 
     /// @dev [CRIT-1] Only owner-approved labels. Attackers cannot self-label contracts.
-    mapping(address => string)                                           public contractLabels;
+    mapping(address => string) public contractLabels;
 
     // ─── Events ───────────────────────────────────────────────────────────────
 
@@ -104,10 +103,10 @@ contract PlainEnglishExecutor is IModule, ReentrancyGuard {
         (bool requireConfirmation, bool warnOnUnknown, bool blockOnUnknown) =
             abi.decode(data, (bool, bool, bool));
         configs[msg.sender] = ExecutorConfig({
-            initialized:         true,
+            initialized: true,
             requireConfirmation: requireConfirmation,
-            warnOnUnknown:       warnOnUnknown,
-            blockOnUnknown:      blockOnUnknown
+            warnOnUnknown: warnOnUnknown,
+            blockOnUnknown: blockOnUnknown
         });
     }
 
@@ -147,10 +146,10 @@ contract PlainEnglishExecutor is IModule, ReentrancyGuard {
             summaries[account][calldataHash] = TransactionSummary({
                 plainEnglish: description,
                 calldataHash: calldataHash,
-                createdAt:    block.timestamp,
-                confirmed:    !config.requireConfirmation,
-                confirmedAt:  !config.requireConfirmation ? block.timestamp : 0,
-                riskLevel:    risk
+                createdAt: block.timestamp,
+                confirmed: !config.requireConfirmation,
+                confirmedAt: !config.requireConfirmation ? block.timestamp : 0,
+                riskLevel: risk
             });
 
             emit SummaryGenerated(account, calldataHash, description, risk);
@@ -166,10 +165,10 @@ contract PlainEnglishExecutor is IModule, ReentrancyGuard {
                     ". Amount: ", _uintToString(value), " wei. This cannot be undone."
                 )),
                 calldataHash: calldataHash,
-                createdAt:    block.timestamp,
-                confirmed:    true,
-                confirmedAt:  block.timestamp,
-                riskLevel:    RiskLevel.LOW
+                createdAt: block.timestamp,
+                confirmed: true,
+                confirmedAt: block.timestamp,
+                riskLevel: RiskLevel.LOW
             });
         }
 
@@ -186,7 +185,7 @@ contract PlainEnglishExecutor is IModule, ReentrancyGuard {
         if (bytes(summary.plainEnglish).length == 0) revert SummaryNotFound();
         if (summary.confirmed) revert SummaryAlreadyConfirmed();
 
-        summary.confirmed   = true;
+        summary.confirmed = true;
         summary.confirmedAt = block.timestamp;
 
         emit SummaryConfirmed(msg.sender, calldataHash);
@@ -197,7 +196,7 @@ contract PlainEnglishExecutor is IModule, ReentrancyGuard {
     /**
      * @notice Add a verified label for a contract address.
      * @dev [CRIT-1] onlyOwner — prevents attackers labelling malicious contracts
-     *      as trusted protocols to deceive users into signing drain transactions.
+     * as trusted protocols to deceive users into signing drain transactions.
      */
     function labelContract(address target, string calldata label) external onlyOwner {
         if (target == address(0)) revert ZeroAddress();
@@ -209,7 +208,7 @@ contract PlainEnglishExecutor is IModule, ReentrancyGuard {
     /// @dev [MED-1] Capped at BATCH_LABEL_LIMIT to prevent DoS.
     function batchLabelContracts(
         address[] calldata targets,
-        string[]  calldata labels
+        string[] calldata labels
     ) external onlyOwner {
         if (targets.length > BATCH_LABEL_LIMIT) revert BatchLimitExceeded();
         require(targets.length == labels.length, "Length mismatch");
@@ -236,7 +235,7 @@ contract PlainEnglishExecutor is IModule, ReentrancyGuard {
     function acceptOwnership() external {
         if (msg.sender != pendingOwner) revert NotOwner();
         emit OwnershipTransferred(owner, pendingOwner);
-        owner        = pendingOwner;
+        owner = pendingOwner;
         pendingOwner = address(0);
     }
 
@@ -248,7 +247,6 @@ contract PlainEnglishExecutor is IModule, ReentrancyGuard {
         bytes calldata callData,
         bytes4 selector
     ) internal view returns (string memory description, RiskLevel risk) {
-
         string memory targetLabel = bytes(contractLabels[target]).length > 0
             ? contractLabels[target]
             : _toHexString(target);

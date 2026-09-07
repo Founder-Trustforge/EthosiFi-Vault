@@ -14,7 +14,6 @@ pragma solidity ^0.8.23;
  * EthosiFi Vault - The Unstealable Wallet
  */
 contract EthosMVPBadge {
-
     // ─── STATE ───────────────────────────────────────────────────────────────
 
     string public constant name   = "EthosiFi MVP Badge";
@@ -26,12 +25,12 @@ contract EthosMVPBadge {
 
     // Tier definitions
     uint8 public constant TIER_MVP = 1; // Standard MVP - staker
-    uint8 public constant TIER_LP  = 2; // Gold tier - LP provider
+    uint8 public constant TIER_LP = 2; // Gold tier - LP provider
 
     struct Badge {
-        uint8   tier;
+        uint8 tier;
         uint256 mintedAt;
-        bool    active;
+        bool active;
     }
 
     // tokenId => Badge

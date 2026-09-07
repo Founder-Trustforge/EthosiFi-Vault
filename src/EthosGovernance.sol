@@ -9,69 +9,68 @@ interface IEthosStaking {
 }
 
 /**
- * @title  EthosGovernance
+ * @title EthosGovernance
  * @notice On-chain governance for EthosiFi Vault MVP token holders.
  *
- * @dev    SECURITY FIXES (2026-08 audit):
- *         [CRIT-1] executeProposal() made an arbitrary .call() with attacker-controlled
- *                  target and callData. A malicious governance proposal could drain any
- *                  contract, transfer ownership, or call any function in the protocol.
- *                  Fixed: only whitelisted target contracts may be called, and only
- *                  whitelisted function selectors are permitted per target.
- *         [HIGH-1] transferOwnership() was one-step. Fixed: two-step.
- *         [MED-1]  No reentrancy guard on executeProposal(). Fixed.
- *         [MED-2]  getActiveProposals() iterated unbounded proposalCount — DoS if
- *                  many proposals exist. Added a pagination-based view.
- *         [MED-3]  Quorum check only required totalVotes >= QUORUM_VOTES but did not
- *                  verify that votesFor constituted a majority of total staked supply.
- *                  Added minimum participation rate check.
+ * @dev SECURITY FIXES (2026-08 audit):
+ * [CRIT-1] executeProposal() made an arbitrary .call() with attacker-controlled
+ * target and callData. A malicious governance proposal could drain any
+ * contract, transfer ownership, or call any function in the protocol.
+ * Fixed: only whitelisted target contracts may be called, and only
+ * whitelisted function selectors are permitted per target.
+ * [HIGH-1] transferOwnership() was one-step. Fixed: two-step.
+ * [MED-1] No reentrancy guard on executeProposal(). Fixed.
+ * [MED-2] getActiveProposals() iterated unbounded proposalCount — DoS if
+ * many proposals exist. Added a pagination-based view.
+ * [MED-3] Quorum check only required totalVotes >= QUORUM_VOTES but did not
+ * verify that votesFor constituted a majority of total staked supply.
+ * Added minimum participation rate check.
  */
 contract EthosGovernance is ReentrancyGuard {
-
     IEthosStaking public immutable stakingContract;
     address public owner;
     address public pendingOwner;
 
     // ─── Constants ────────────────────────────────────────────────────────────
 
-    uint256 public constant VOTING_PERIOD     = 7 days;
-    uint256 public constant TIMELOCK_PERIOD   = 2 days;
-    uint256 public constant QUORUM_VOTES      = 100;
-    uint256 public constant MAX_TARGETS       = 20;
+    uint256 public constant VOTING_PERIOD = 7 days;
+    uint256 public constant TIMELOCK_PERIOD = 2 days;
+    uint256 public constant QUORUM_VOTES = 100;
+    uint256 public constant MAX_TARGETS = 20;
 
     // ─── Types ────────────────────────────────────────────────────────────────
 
     enum ProposalCategory { FEATURE, CHAIN, THREAT, TREASURY, PARAMETER }
-    enum ProposalStatus   { ACTIVE, PASSED, REJECTED, EXECUTED, CANCELLED }
+    enum ProposalStatus { ACTIVE, PASSED, REJECTED, EXECUTED, CANCELLED }
 
     struct Proposal {
-        uint256          id;
-        address          proposer;
-        string           title;
-        string           description;
+        uint256 id;
+        address proposer;
+        string title;
+        string description;
         ProposalCategory category;
-        ProposalStatus   status;
-        uint256          votesFor;
-        uint256          votesAgainst;
-        uint256          startTime;
-        uint256          endTime;
-        uint256          executionTime;
-        bool             executed;
-        bytes            callData;
-        address          target;
+        ProposalStatus status;
+        uint256 votesFor;
+        uint256 votesAgainst;
+        uint256 startTime;
+        uint256 endTime;
+        uint256 executionTime;
+        bool executed;
+        bytes callData;
+        address target;
     }
 
     // ─── Storage ──────────────────────────────────────────────────────────────
 
     uint256 public proposalCount;
     mapping(uint256 => Proposal) public proposals;
-    mapping(uint256 => mapping(address => bool))    public hasVoted;
+    mapping(uint256 => mapping(address => bool)) public hasVoted;
     mapping(uint256 => mapping(address => uint256)) public votesUsed;
 
     /// @dev [CRIT-1] Whitelist of contracts that governance can call.
-    mapping(address => bool)                          public approvedTargets;
+    mapping(address => bool) public approvedTargets;
     /// @dev [CRIT-1] Per-target whitelist of function selectors.
-    mapping(address => mapping(bytes4 => bool))       public approvedSelectors;
+    mapping(address => mapping(bytes4 => bool)) public approvedSelectors;
 
     // ─── Events ───────────────────────────────────────────────────────────────
 
@@ -135,20 +134,20 @@ contract EthosGovernance is ReentrancyGuard {
 
         proposalId = ++proposalCount;
         proposals[proposalId] = Proposal({
-            id:            proposalId,
-            proposer:      msg.sender,
-            title:         title,
-            description:   description,
-            category:      category,
-            status:        ProposalStatus.ACTIVE,
-            votesFor:      0,
-            votesAgainst:  0,
-            startTime:     block.timestamp,
-            endTime:       block.timestamp + VOTING_PERIOD,
+            id: proposalId,
+            proposer: msg.sender,
+            title: title,
+            description: description,
+            category: category,
+            status: ProposalStatus.ACTIVE,
+            votesFor: 0,
+            votesAgainst: 0,
+            startTime: block.timestamp,
+            endTime: block.timestamp + VOTING_PERIOD,
             executionTime: block.timestamp + VOTING_PERIOD + TIMELOCK_PERIOD,
-            executed:      false,
-            callData:      callData,
-            target:        target
+            executed: false,
+            callData: callData,
+            target: target
         });
 
         emit ProposalCreated(proposalId, msg.sender, title, category, block.timestamp + VOTING_PERIOD);
@@ -165,11 +164,11 @@ contract EthosGovernance is ReentrancyGuard {
         uint256 votes = stakingContract.getGovernanceVotes(msg.sender);
         if (votes == 0) revert NoVotingPower();
 
-        hasVoted[proposalId][msg.sender]  = true;
+        hasVoted[proposalId][msg.sender] = true;
         votesUsed[proposalId][msg.sender] = votes;
 
         if (support) { p.votesFor += votes; }
-        else          { p.votesAgainst += votes; }
+        else { p.votesAgainst += votes; }
 
         emit VoteCast(msg.sender, proposalId, support, votes);
     }
@@ -193,8 +192,8 @@ contract EthosGovernance is ReentrancyGuard {
     /**
      * @notice Execute a passed proposal after timelock.
      * @dev [CRIT-1] Target and selector re-validated at execution time.
-     *      Even if whitelist changes after proposal creation, the execution
-     *      will revert if the target/selector is no longer approved.
+     * Even if whitelist changes after proposal creation, the execution
+     * will revert if the target/selector is no longer approved.
      */
     function executeProposal(uint256 proposalId) external nonReentrant {
         Proposal storage p = proposals[proposalId];
@@ -204,7 +203,7 @@ contract EthosGovernance is ReentrancyGuard {
 
         // [CRIT-1] Effects before interactions
         p.executed = true;
-        p.status   = ProposalStatus.EXECUTED;
+        p.status = ProposalStatus.EXECUTED;
 
         if (p.target != address(0) && p.callData.length >= 4) {
             // Re-validate at execution time
@@ -262,7 +261,7 @@ contract EthosGovernance is ReentrancyGuard {
     function acceptOwnership() external {
         if (msg.sender != pendingOwner) revert NotOwner();
         emit OwnershipTransferred(owner, pendingOwner);
-        owner        = pendingOwner;
+        owner = pendingOwner;
         pendingOwner = address(0);
     }
 

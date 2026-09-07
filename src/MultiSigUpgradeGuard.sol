@@ -8,32 +8,31 @@ import {IModule} from "erc7579/interfaces/IModule.sol";
  * @title MultiSigUpgradeGuard
  * @notice EthosiFi Vault — Prevents any module upgrade without guardian consensus + time delay.
  * @dev Closes the supply-chain attack vector that caused the $1.5B Bybit hack
- *      and the Trust Wallet browser extension breach of December 2025.
- *      No single party — including the EthosiFi team — can push a malicious
- *      upgrade without guardian approval and a mandatory waiting period.
+ * and the Trust Wallet browser extension breach of December 2025.
+ * No single party — including the EthosiFi team — can push a malicious
+ * upgrade without guardian approval and a mandatory waiting period.
  *
  * Layer: Core Security
  */
 contract MultiSigUpgradeGuard is IModule {
-
     uint256 constant MODULE_TYPE_HOOK = 4;
-    uint256 public constant UPGRADE_DELAY = 72 hours;   // 3-day mandatory wait
+    uint256 public constant UPGRADE_DELAY = 72 hours; // 3-day mandatory wait
     uint256 public constant MAX_GUARDIANS = 10;
 
     struct UpgradeProposal {
         address proposedModule;
-        bytes4  moduleType;
+        bytes4 moduleType;
         uint256 proposedAt;
         uint256 approvals;
-        bool    executed;
-        bool    cancelled;
+        bool executed;
+        bool cancelled;
         mapping(address => bool) hasApproved;
     }
 
     struct GuardConfig {
-        bool     initialized;
+        bool initialized;
         address[] guardians;
-        uint256  threshold;
+        uint256 threshold;
         mapping(address => bool) isGuardian;
         mapping(bytes32 => UpgradeProposal) proposals;
     }
@@ -81,7 +80,7 @@ contract MultiSigUpgradeGuard is IModule {
 
     /**
      * @notice Propose a module upgrade. Must be a guardian.
-     * @param account   The vault account being upgraded
+     * @param account The vault account being upgraded
      * @param newModule The new module contract address
      * @param moduleType The ERC-7579 module type being replaced
      */
@@ -230,7 +229,4 @@ contract MultiSigUpgradeGuard is IModule {
     function isInitialized(address account) external view returns (bool) {
         return configs[account].initialized;
     }
-
-
-
 }

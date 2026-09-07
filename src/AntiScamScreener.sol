@@ -25,29 +25,28 @@ import {IModule} from "erc7579/interfaces/IModule.sol";
  * Layer: User Protection (Pillar 2)
  */
 contract AntiScamScreener is IModule {
-
     uint256 constant MODULE_TYPE_HOOK = 4;
 
     enum ThreatLevel {
-        SAFE,           // 0 - No known threats
-        LOW,            // 1 - Minor concerns, warn only
-        MEDIUM,         // 2 - Significant risk, require extra confirmation
-        HIGH,           // 3 - Known scam/phishing, block by default
-        CRITICAL        // 4 - Confirmed exploit/sanctioned, always block
+        SAFE, // 0 - No known threats
+        LOW, // 1 - Minor concerns, warn only
+        MEDIUM, // 2 - Significant risk, require extra confirmation
+        HIGH, // 3 - Known scam/phishing, block by default
+        CRITICAL // 4 - Confirmed exploit/sanctioned, always block
     }
 
     struct ThreatEntry {
         ThreatLevel level;
-        string      reason;         // Human-readable reason
-        uint256     reportedAt;
-        uint256     reportCount;
-        bool        active;
+        string reason; // Human-readable reason
+        uint256 reportedAt;
+        uint256 reportCount;
+        bool active;
     }
 
     struct ScreenerConfig {
-        bool        initialized;
-        ThreatLevel blockThreshold;  // Block transactions at this level and above
-        bool        allowOverride;   // Allow user to override MEDIUM threats (not HIGH/CRITICAL)
+        bool initialized;
+        ThreatLevel blockThreshold; // Block transactions at this level and above
+        bool allowOverride; // Allow user to override MEDIUM threats (not HIGH/CRITICAL)
         mapping(address => bool) userWhitelist; // User-specific bypass for false positives
     }
 
@@ -72,13 +71,12 @@ contract AntiScamScreener is IModule {
     function onInstall(bytes calldata data) external {
         require(!configs[msg.sender].initialized, "Already initialized");
 
-        (uint8 blockThreshold, bool allowOverride) =
-            abi.decode(data, (uint8, bool));
+        (uint8 blockThreshold, bool allowOverride) = abi.decode(data, (uint8, bool));
 
         ScreenerConfig storage config = configs[msg.sender];
-        config.initialized    = true;
+        config.initialized = true;
         config.blockThreshold = ThreatLevel(blockThreshold > 0 ? blockThreshold : uint8(ThreatLevel.HIGH));
-        config.allowOverride  = allowOverride;
+        config.allowOverride = allowOverride;
     }
 
     function onUninstall(bytes calldata) external {
@@ -92,12 +90,10 @@ contract AntiScamScreener is IModule {
     /**
      * @notice Pre-execution hook. Screens the target address before any transaction.
      */
-    function preCheck(
-        address account,
-        address target,
-        uint256,
-        bytes calldata callData
-    ) external returns (bytes memory) {
+    function preCheck(address account, address target, uint256, bytes calldata callData)
+        external
+        returns (bytes memory)
+    {
         totalScreened++;
 
         ScreenerConfig storage config = configs[account];
@@ -118,11 +114,15 @@ contract AntiScamScreener is IModule {
                 if (callThreat.active && uint8(callThreat.level) >= uint8(config.blockThreshold)) {
                     totalBlocked++;
                     emit TransactionBlocked(account, callTarget, callThreat.level, callThreat.reason);
-                    revert(string(abi.encodePacked(
-                        "EthosiFi AntiScam: BLOCKED. Recipient flagged as [",
-                        callThreat.reason,
-                        "]. Contact support@ethosifi.com if this is an error."
-                    )));
+                    revert(
+                        string(
+                            abi.encodePacked(
+                                "EthosiFi AntiScam: BLOCKED. Recipient flagged as [",
+                                callThreat.reason,
+                                "]. Contact support@ethosifi.com if this is an error."
+                            )
+                        )
+                    );
                 }
             }
         }
@@ -132,11 +132,15 @@ contract AntiScamScreener is IModule {
             if (threat.level == ThreatLevel.CRITICAL || threat.level == ThreatLevel.HIGH) {
                 totalBlocked++;
                 emit TransactionBlocked(account, target, threat.level, threat.reason);
-                revert(string(abi.encodePacked(
-                    "EthosiFi AntiScam: BLOCKED. Contract flagged as [",
-                    threat.reason,
-                    "]. This address is known malicious. Transaction cancelled."
-                )));
+                revert(
+                    string(
+                        abi.encodePacked(
+                            "EthosiFi AntiScam: BLOCKED. Contract flagged as [",
+                            threat.reason,
+                            "]. This address is known malicious. Transaction cancelled."
+                        )
+                    )
+                );
             }
 
             // MEDIUM: block unless override allowed
@@ -163,21 +167,17 @@ contract AntiScamScreener is IModule {
      * @notice Register a threat. Production: onlyGovernance multisig.
      */
     // [CRIT-1 FIXED] onlyOwner
-    function registerThreat(
-        address target,
-        ThreatLevel level,
-        string calldata reason
-    ) external onlyOwner {
+    function registerThreat(address target, ThreatLevel level, string calldata reason) external onlyOwner {
         // Production: require governance multisig
         require(target != address(0), "Invalid target");
         require(level != ThreatLevel.SAFE, "Use removeThreat for safe");
 
         ThreatEntry storage entry = threatRegistry[target];
-        entry.level       = level;
-        entry.reason      = reason;
-        entry.reportedAt  = entry.reportedAt == 0 ? block.timestamp : entry.reportedAt;
+        entry.level = level;
+        entry.reason = reason;
+        entry.reportedAt = entry.reportedAt == 0 ? block.timestamp : entry.reportedAt;
         entry.reportCount++;
-        entry.active      = true;
+        entry.active = true;
 
         emit ThreatRegistered(target, level, reason);
     }
@@ -186,19 +186,18 @@ contract AntiScamScreener is IModule {
      * @notice Batch register threats for efficient feed updates.
      */
     // [CRIT-1 FIXED] onlyOwner. [MED-3] Batch limited.
-    function batchRegisterThreats(
-        address[] calldata targets,
-        ThreatLevel[] calldata levels,
-        string[] calldata reasons
-    ) external onlyOwner {
+    function batchRegisterThreats(address[] calldata targets, ThreatLevel[] calldata levels, string[] calldata reasons)
+        external
+        onlyOwner
+    {
         require(targets.length == levels.length && levels.length == reasons.length, "Length mismatch");
         for (uint256 i = 0; i < targets.length; i++) {
             ThreatEntry storage entry = threatRegistry[targets[i]];
-            entry.level       = levels[i];
-            entry.reason      = reasons[i];
-            entry.reportedAt  = entry.reportedAt == 0 ? block.timestamp : entry.reportedAt;
+            entry.level = levels[i];
+            entry.reason = reasons[i];
+            entry.reportedAt = entry.reportedAt == 0 ? block.timestamp : entry.reportedAt;
             entry.reportCount++;
-            entry.active      = true;
+            entry.active = true;
             emit ThreatRegistered(targets[i], levels[i], reasons[i]);
         }
     }
@@ -235,11 +234,11 @@ contract AntiScamScreener is IModule {
         return (e.level, e.reason, e.active);
     }
 
-    function screenAddress(address account, address target) external view returns (
-        bool blocked,
-        ThreatLevel level,
-        string memory reason
-    ) {
+    function screenAddress(address account, address target)
+        external
+        view
+        returns (bool blocked, ThreatLevel level, string memory reason)
+    {
         ScreenerConfig storage config = configs[account];
         if (!config.initialized) return (false, ThreatLevel.SAFE, "");
         if (config.userWhitelist[target]) return (false, ThreatLevel.SAFE, "Whitelisted");
@@ -258,7 +257,5 @@ contract AntiScamScreener is IModule {
     function isInitialized(address account) external view returns (bool) {
         return configs[account].initialized;
     }
-
-
 
 }

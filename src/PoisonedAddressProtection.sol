@@ -8,49 +8,48 @@ import {PackedUserOperation} from "account-abstraction/interfaces/PackedUserOper
  * @title PoisonedAddressProtection
  * @notice EthosiFi Vault — Eliminates address poisoning attacks at the contract layer.
  * @dev Address poisoning is the #1 growing threat in crypto.
- *      In 2025: 65.4M poisoning transactions detected. 160,000+ per day.
- *      One victim lost $50M USDT in a single poisoning attack (Dec 2025).
+ * In 2025: 65.4M poisoning transactions detected. 160,000+ per day.
+ * One victim lost $50M USDT in a single poisoning attack (Dec 2025).
  *
- *      Attack method: Attacker creates a wallet with matching first 4 + last 4 characters.
+ * Attack method: Attacker creates a wallet with matching first 4 + last 4 characters.
  *      Victim copies from transaction history. Funds sent to attacker's lookalike address.
  *
- *      This contract kills that attack by:
- *      1. Requiring full address confirmation before any transfer
- *      2. Detecting lookalike addresses via prefix/suffix matching
- *      3. Maintaining a personal verified address book
- *      4. Enforcing a mandatory review period for first-time recipients
+ * This contract kills that attack by:
+ * 1. Requiring full address confirmation before any transfer
+ * 2. Detecting lookalike addresses via prefix/suffix matching
+ * 3. Maintaining a personal verified address book
+ * 4. Enforcing a mandatory review period for first-time recipients
  *
  * Layer: User Protection (Pillar 1)
  */
 contract PoisonedAddressProtection is IValidator {
-
     uint256 constant MODULE_TYPE_VALIDATOR = 1;
     uint256 constant SIG_VALIDATION_SUCCESS = 0;
     uint256 constant SIG_VALIDATION_FAILED = 1;
 
-    uint256 public constant DEFAULT_THRESHOLD   = 50 * 1e6;   // $50 USDC — require verification above this
-    uint256 public constant CONFIRMATION_WINDOW = 15 minutes;  // Pre-confirmed address valid for 15 min
-    uint256 public constant NEW_ADDRESS_DELAY   = 5 minutes;   // First-time recipients get extra delay
+    uint256 public constant DEFAULT_THRESHOLD = 50 * 1e6; // $50 USDC — require verification above this
+    uint256 public constant CONFIRMATION_WINDOW = 15 minutes; // Pre-confirmed address valid for 15 min
+    uint256 public constant NEW_ADDRESS_DELAY = 5 minutes; // First-time recipients get extra delay
 
     struct ProtectionConfig {
-        bool    initialized;
-        bool    strictMode;           // True = verify ALL transfers regardless of amount
-        uint256 threshold;            // Verify transfers above this amount
+        bool initialized;
+        bool strictMode; // True = verify ALL transfers regardless of amount
+        uint256 threshold; // Verify transfers above this amount
         uint256 confirmationWindow;
     }
 
     struct AddressRecord {
-        bool    verified;             // Explicitly verified by user
-        uint256 firstSeenAt;          // When this address was first added
+        bool verified; // Explicitly verified by user
+        uint256 firstSeenAt; // When this address was first added
         uint256 lastUsedAt;
         uint256 totalTransactions;
-        bytes32 fullAddressHash;      // On-chain proof of full address
+        bytes32 fullAddressHash; // On-chain proof of full address
     }
 
     struct PendingConfirmation {
         bytes32 fullAddressHash;
         uint256 confirmedAt;
-        bool    confirmed;
+        bool confirmed;
         uint256 amount;
     }
 
@@ -78,9 +77,9 @@ contract PoisonedAddressProtection is IValidator {
             abi.decode(data, (bool, uint256, uint256));
 
         configs[msg.sender] = ProtectionConfig({
-            initialized:        true,
-            strictMode:         strictMode,
-            threshold:          customThreshold > 0 ? customThreshold : DEFAULT_THRESHOLD,
+            initialized: true,
+            strictMode: strictMode,
+            threshold: customThreshold > 0 ? customThreshold : DEFAULT_THRESHOLD,
             confirmationWindow: customWindow > 0 ? customWindow : CONFIRMATION_WINDOW
         });
     }
@@ -130,11 +129,11 @@ contract PoisonedAddressProtection is IValidator {
 
     /**
      * @notice REQUIRED before any unverified transfer.
-     *         Frontend MUST display the COMPLETE address — no truncation.
-     *         User must manually confirm every character matches their intent.
+     * Frontend MUST display the COMPLETE address — no truncation.
+     * User must manually confirm every character matches their intent.
      *
      * @param recipient The full recipient address (all 42 characters / 20 bytes)
-     * @param amount    The exact amount being transferred
+     * @param amount The exact amount being transferred
      */
     function confirmFullAddress(
         address recipient,
@@ -164,9 +163,9 @@ contract PoisonedAddressProtection is IValidator {
 
         pendingConfirmations[msg.sender][transferId] = PendingConfirmation({
             fullAddressHash: keccak256(abi.encodePacked(recipient)),
-            confirmedAt:     block.timestamp,
-            confirmed:       true,
-            amount:          amount
+            confirmedAt: block.timestamp,
+            confirmed: true,
+            amount: amount
         });
 
         emit AddressConfirmed(msg.sender, recipient, transferId);
@@ -178,7 +177,7 @@ contract PoisonedAddressProtection is IValidator {
 
     /**
      * @notice Verify and save a recipient to your personal address book.
-     *         Once verified, no further confirmation needed for this address.
+     * Once verified, no further confirmation needed for this address.
      */
     function verifyAndSaveAddress(address recipient) external {
         require(configs[msg.sender].initialized, "Not initialized");
@@ -192,8 +191,8 @@ contract PoisonedAddressProtection is IValidator {
         }
 
         AddressRecord storage record = addressBook[msg.sender][recipient];
-        record.verified        = true;
-        record.firstSeenAt     = record.firstSeenAt == 0 ? block.timestamp : record.firstSeenAt;
+        record.verified = true;
+        record.firstSeenAt = record.firstSeenAt == 0 ? block.timestamp : record.firstSeenAt;
         record.fullAddressHash = keccak256(abi.encodePacked(recipient));
 
         emit AddressVerified(msg.sender, recipient);
@@ -220,7 +219,7 @@ contract PoisonedAddressProtection is IValidator {
     /**
      * @notice Add a known poisoned address fingerprint to the global registry.
      * @dev In production: controlled by EthosiFi governance multisig.
-     *      Fed by Chainalysis, on-chain indexers, and community reports.
+     * Fed by Chainalysis, on-chain indexers, and community reports.
      */
     // [CRIT-3 FIXED] onlyOwner — previously callable by anyone
     function flagPoisonedFingerprint(bytes8 fingerprint) external onlyOwner {
@@ -239,19 +238,19 @@ contract PoisonedAddressProtection is IValidator {
 
     /**
      * @notice Extract the first 4 + last 4 bytes of an address as a fingerprint.
-     *         This is how attackers craft lookalike addresses — we use it against them.
+     * This is how attackers craft lookalike addresses — we use it against them.
      */
     function _getFingerprint(address addr) internal pure returns (bytes8) {
         bytes20 addrBytes = bytes20(addr);
-        bytes4 prefix = bytes4(addrBytes);                     // First 4 bytes
-        bytes4 suffix = bytes4(uint32(uint160(addr)));         // Last 4 bytes
+        bytes4 prefix = bytes4(addrBytes); // First 4 bytes
+        bytes4 suffix = bytes4(uint32(uint160(addr))); // Last 4 bytes
         return bytes8(bytes.concat(prefix, suffix));
     }
 
     function _decodeRecipient(bytes calldata callData) internal pure returns (address recipient, uint256 amount) {
         if (callData.length < 68) return (address(0), 0);
         recipient = address(bytes20(callData[16:36]));
-        amount    = uint256(bytes32(callData[36:68]));
+        amount = uint256(bytes32(callData[36:68]));
     }
 
     // ─────────────────────────────────────────────

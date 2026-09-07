@@ -7,30 +7,29 @@ import {ReentrancyGuard} from "solady/utils/ReentrancyGuard.sol";
 import {IERC7579Account} from "erc7579/interfaces/IERC7579Account.sol";
 
 /**
- * @title  GuardianValidator
+ * @title GuardianValidator
  * @author EthosiFi (founder@ethosifi.com)
  * @notice ERC-7579 validator module — weighted social recovery with time delays
- *         for the EthosiFi Vault.
+ * for the EthosiFi Vault.
  *
- *         Recovery model
- *         ──────────────
- *         • Guardians are assigned weights (e.g. family=3, friend=1, hardware key=5).
- *         • A recovery is initiated by ANY guardian or the account owner.
- *         • Other guardians approve during the RECOVERY_DELAY window.
- *         • Once total weight ≥ threshold AND delay has elapsed → execution is unlocked.
- *         • Any single guardian can cancel during the delay (veto power).
+ * Recovery model
+ * ──────────────
+ * • Guardians are assigned weights (e.g. family=3, friend=1, hardware key=5).
+ * • A recovery is initiated by ANY guardian or the account owner.
+ * • Other guardians approve during the RECOVERY_DELAY window.
+ * • Once total weight ≥ threshold AND delay has elapsed → execution is unlocked.
+ * • Any single guardian can cancel during the delay (veto power).
  *         • Execution rotates the account's validator module (BiometricValidator credential).
- *         • Each guardian has a per-approval cooldown to prevent rapid re-voting.
- *         • Only one active recovery per account at a time.
+ * • Each guardian has a per-approval cooldown to prevent rapid re-voting.
+ * • Only one active recovery per account at a time.
  *
- *         This validator does NOT validate standard UserOps (always returns FAILED).
- *         It is a recovery-only module — it is not in the hot path.
+ * This validator does NOT validate standard UserOps (always returns FAILED).
+ * It is a recovery-only module — it is not in the hot path.
  *
- * @dev    BSL 1.1 — non-commercial use free; commercial license: founder@ethosifi.com
- *         Converts to GPL-3.0 on 2029-01-01.
+ * @dev BSL 1.1 — non-commercial use free; commercial license: founder@ethosifi.com
+ * Converts to GPL-3.0 on 2029-01-01.
  */
 contract GuardianValidator is IValidator, ReentrancyGuard {
-
     // ─────────────────────────────────────────────────────────────
     // Constants
     // ─────────────────────────────────────────────────────────────
@@ -53,24 +52,24 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
     struct Guardian {
         address addr;
         uint256 weight;
-        bytes32 identityHash;   // off-chain identity commitment (e.g. keccak256(email))
+        bytes32 identityHash; // off-chain identity commitment (e.g. keccak256(email))
     }
 
     struct AccountConfig {
-        bool       initialized;
-        uint256    threshold;   // minimum total weight to approve recovery
-        uint256    guardianCount;
+        bool initialized;
+        uint256 threshold; // minimum total weight to approve recovery
+        uint256 guardianCount;
     }
 
     struct RecoveryRequest {
-        bytes32    newCredentialHash;   // keccak256(credentialId ++ pubKey) to install
-        address    newValidator;        // address of the new validator module (optional)
-        bytes      newValidatorData;    // install data for the new validator module
-        uint256    initiatedAt;
-        uint256    totalWeight;
-        bool       executed;
-        bool       cancelled;
-        address    initiator;
+        bytes32 newCredentialHash; // keccak256(credentialId ++ pubKey) to install
+        address newValidator; // address of the new validator module (optional)
+        bytes newValidatorData; // install data for the new validator module
+        uint256 initiatedAt;
+        uint256 totalWeight;
+        bool executed;
+        bool cancelled;
+        address initiator;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -149,9 +148,9 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
 
     /**
      * @notice Install the module on a smart account.
-     * @param  data ABI-encoded (Guardian[] guardians, uint256 threshold)
-     *              Guardian: (address addr, uint256 weight, bytes32 identityHash)
-     *              threshold: minimum total weight required for recovery approval.
+     * @param data ABI-encoded (Guardian[] guardians, uint256 threshold)
+     * Guardian: (address addr, uint256 weight, bytes32 identityHash)
+     * threshold: minimum total weight required for recovery approval.
      */
     function onInstall(bytes calldata data) external override {
         if (_configs[msg.sender].initialized) revert AlreadyInitialized();
@@ -159,16 +158,16 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
         (Guardian[] memory initialGuardians, uint256 _threshold) =
             abi.decode(data, (Guardian[], uint256));
 
-        if (initialGuardians.length == 0)             revert InvalidGuardian();
-        if (initialGuardians.length > MAX_GUARDIANS)  revert TooManyGuardians();
-        if (_threshold == 0)                          revert InvalidThreshold();
+        if (initialGuardians.length == 0) revert InvalidGuardian();
+        if (initialGuardians.length > MAX_GUARDIANS) revert TooManyGuardians();
+        if (_threshold == 0) revert InvalidThreshold();
 
         uint256 totalWeight = 0;
 
         for (uint256 i = 0; i < initialGuardians.length; i++) {
             Guardian memory g = initialGuardians[i];
-            if (g.addr == address(0))                         revert ZeroAddress();
-            if (g.weight == 0)                                revert InvalidWeight();
+            if (g.addr == address(0)) revert ZeroAddress();
+            if (g.weight == 0) revert InvalidWeight();
             if (_guardians[msg.sender][g.addr].addr != address(0)) revert GuardianAlreadyExists();
 
             // Deduplicate
@@ -187,15 +186,15 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
         require(totalWeight >= _threshold, "Threshold unreachable");
 
         _configs[msg.sender] = AccountConfig({
-            initialized:   true,
-            threshold:     _threshold,
+            initialized: true,
+            threshold: _threshold,
             guardianCount: initialGuardians.length
         });
     }
 
     /**
      * @notice Uninstall — clears all guardian state.
-     *         If a recovery is pending it is implicitly abandoned.
+     * If a recovery is pending it is implicitly abandoned.
      */
     function onUninstall(bytes calldata) external override {
         address[] storage list = _guardianList[msg.sender];
@@ -213,8 +212,8 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
 
     /**
      * @notice This module does NOT validate standard UserOps.
-     *         It is a recovery-only module. Always returns FAILED.
-     *         The TimeLockValidator handles normal UserOp validation.
+     * It is a recovery-only module. Always returns FAILED.
+     * The TimeLockValidator handles normal UserOp validation.
      */
     function validateUserOp(
         PackedUserOperation calldata,
@@ -241,13 +240,13 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
 
     /**
      * @notice Initiate a recovery request.
-     *         Can be called by any guardian OR the account itself.
+     * Can be called by any guardian OR the account itself.
      *
-     * @param  account            The account to recover.
-     * @param  newCredentialHash  keccak256 of the new credential to install
-     *                            (e.g. keccak256(abi.encode(credentialId, pubKeyX, pubKeyY))).
-     * @param  newValidator       Address of new validator module to install (address(0) = keep existing).
-     * @param  newValidatorData   Install calldata for the new validator module.
+     * @param account The account to recover.
+     * @param newCredentialHash keccak256 of the new credential to install
+     * (e.g. keccak256(abi.encode(credentialId, pubKeyX, pubKeyY))).
+     * @param newValidator Address of new validator module to install (address(0) = keep existing).
+     * @param newValidatorData Install calldata for the new validator module.
      */
     function initiateRecovery(
         address account,
@@ -260,7 +259,7 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
 
         // Only a guardian or the account itself may initiate
         bool callerIsGuardian = _guardians[account][msg.sender].addr != address(0);
-        bool callerIsAccount  = msg.sender == account;
+        bool callerIsAccount = msg.sender == account;
         if (!callerIsGuardian && !callerIsAccount) revert NotGuardianOrOwner();
 
         RecoveryRequest storage req = _recoveries[account];
@@ -271,10 +270,10 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
 
         RecoveryRequest storage newReq = _recoveries[account];
         newReq.newCredentialHash = newCredentialHash;
-        newReq.newValidator      = newValidator;
-        newReq.newValidatorData  = newValidatorData;
-        newReq.initiatedAt       = block.timestamp;
-        newReq.initiator         = msg.sender;
+        newReq.newValidator = newValidator;
+        newReq.newValidatorData = newValidatorData;
+        newReq.initiatedAt = block.timestamp;
+        newReq.initiator = msg.sender;
 
         // If initiator is a guardian, count their weight immediately
         if (callerIsGuardian) {
@@ -290,7 +289,7 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
 
     /**
      * @notice Guardian approves the active recovery request.
-     * @param  account  The account being recovered.
+     * @param account The account being recovered.
      */
     function approveRecovery(address account) external nonReentrant {
         AccountConfig storage cfg = _configs[account];
@@ -300,9 +299,9 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
         if (g.addr == address(0)) revert NotGuardian();
 
         RecoveryRequest storage req = _recoveries[account];
-        if (req.initiatedAt == 0)  revert NoRecoveryActive();
-        if (req.executed)          revert AlreadyExecuted();
-        if (req.cancelled)         revert AlreadyCancelled();
+        if (req.initiatedAt == 0) revert NoRecoveryActive();
+        if (req.executed) revert AlreadyExecuted();
+        if (req.cancelled) revert AlreadyCancelled();
 
         // Approval nonce tied to initiatedAt — prevents approvals from old requests counting
         if (_approvals[account][req.initiatedAt][msg.sender]) revert AlreadyApproved();
@@ -330,18 +329,18 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
 
     /**
      * @notice Execute recovery after delay has elapsed and threshold is met.
-     *         Anyone may call this once conditions are satisfied (trustless execution).
-     * @param  account  The account being recovered.
+     * Anyone may call this once conditions are satisfied (trustless execution).
+     * @param account The account being recovered.
      */
     function executeRecovery(address account) external nonReentrant {
         AccountConfig storage cfg = _configs[account];
         if (!cfg.initialized) revert NotInitialized();
 
         RecoveryRequest storage req = _recoveries[account];
-        if (req.initiatedAt == 0)                            revert NoRecoveryActive();
-        if (req.executed)                                    revert AlreadyExecuted();
-        if (req.cancelled)                                   revert AlreadyCancelled();
-        if (req.totalWeight < cfg.threshold)                 revert InsufficientWeight();
+        if (req.initiatedAt == 0) revert NoRecoveryActive();
+        if (req.executed) revert AlreadyExecuted();
+        if (req.cancelled) revert AlreadyCancelled();
+        if (req.totalWeight < cfg.threshold) revert InsufficientWeight();
         if (block.timestamp < req.initiatedAt + RECOVERY_DELAY) revert DelayNotElapsed();
 
         _executeRecovery(account);
@@ -349,21 +348,21 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
 
     /**
      * @notice Cancel an active recovery request.
-     *         Any guardian OR the account itself can cancel during the delay window.
-     * @param  account  The account whose recovery is being cancelled.
+     * Any guardian OR the account itself can cancel during the delay window.
+     * @param account The account whose recovery is being cancelled.
      */
     function cancelRecovery(address account) external {
         AccountConfig storage cfg = _configs[account];
         if (!cfg.initialized) revert NotInitialized();
 
         bool callerIsGuardian = _guardians[account][msg.sender].addr != address(0);
-        bool callerIsAccount  = msg.sender == account;
+        bool callerIsAccount = msg.sender == account;
         if (!callerIsGuardian && !callerIsAccount) revert NotGuardianOrOwner();
 
         RecoveryRequest storage req = _recoveries[account];
         if (req.initiatedAt == 0) revert NoRecoveryActive();
-        if (req.executed)         revert CannotCancelExecuted();
-        if (req.cancelled)        revert AlreadyCancelled();
+        if (req.executed) revert CannotCancelExecuted();
+        if (req.cancelled) revert AlreadyCancelled();
 
         req.cancelled = true;
         emit RecoveryCancelled(account, msg.sender);
@@ -389,8 +388,8 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
         if (_guardians[msg.sender][guardianAddr].addr != address(0)) revert GuardianAlreadyExists();
 
         _guardians[msg.sender][guardianAddr] = Guardian({
-            addr:         guardianAddr,
-            weight:       weight,
+            addr: guardianAddr,
+            weight: weight,
             identityHash: identityHash
         });
         _guardianList[msg.sender].push(guardianAddr);
@@ -401,7 +400,7 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
 
     /**
      * @notice Remove a guardian. Only callable by the account itself.
-     *         Cannot remove if it would make threshold unreachable.
+     * Cannot remove if it would make threshold unreachable.
      */
     function removeGuardian(address guardianAddr) external {
         AccountConfig storage cfg = _configs[msg.sender];
@@ -410,7 +409,7 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
 
         // Check threshold still reachable after removal
         uint256 removedWeight = _guardians[msg.sender][guardianAddr].weight;
-        uint256 totalWeight   = _totalGuardianWeight(msg.sender);
+        uint256 totalWeight = _totalGuardianWeight(msg.sender);
         require(totalWeight - removedWeight >= cfg.threshold, "Would make threshold unreachable");
 
         delete _guardians[msg.sender][guardianAddr];
@@ -449,7 +448,7 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
     // ─────────────────────────────────────────────────────────────
 
     function getConfig(address account) external view returns (
-        bool   initialized,
+        bool initialized,
         uint256 threshold,
         uint256 guardianCount
     ) {
@@ -476,8 +475,8 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
         uint256 initiatedAt,
         uint256 executeAfter,
         uint256 totalWeight,
-        bool    executed,
-        bool    cancelled,
+        bool executed,
+        bool cancelled,
         address initiator
     ) {
         RecoveryRequest storage req = _recoveries[account];
@@ -530,16 +529,16 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
     // ─────────────────────────────────────────────────────────────
 
     /**
-     * @dev  Execute the approved recovery:
-     *       1. Mark as executed (effects before interactions).
-     *       2. If a new validator module is specified, call the account to
-     *          uninstall the old BiometricValidator and install the new one.
-     *       3. If no new module, call the existing BiometricValidator to
-     *          update the credential (via a known interface).
-     *       4. Emit RecoveryExecuted.
+     * @dev Execute the approved recovery:
+     * 1. Mark as executed (effects before interactions).
+     * 2. If a new validator module is specified, call the account to
+     * uninstall the old BiometricValidator and install the new one.
+     * 3. If no new module, call the existing BiometricValidator to
+     * update the credential (via a known interface).
+     * 4. Emit RecoveryExecuted.
      *
-     * @dev  The account must have authorised this module as an executor
-     *       (ERC-7579 executor permission) to call executeFromExecutor.
+     * @dev The account must have authorised this module as an executor
+     * (ERC-7579 executor permission) to call executeFromExecutor.
      */
     function _executeRecovery(address account) internal {
         RecoveryRequest storage req = _recoveries[account];
@@ -547,7 +546,7 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
         // Effects first — reentrancy safe
         req.executed = true;
 
-        bytes32 credHash     = req.newCredentialHash;
+        bytes32 credHash = req.newCredentialHash;
         address newValidator = req.newValidator;
         bytes memory installData = req.newValidatorData;
 
@@ -556,13 +555,13 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
         if (newValidator != address(0)) {
             // Full validator rotation: uninstall current BiometricValidator, install new one.
             // ERC-7579: account.uninstallModule(MODULE_TYPE_VALIDATOR, oldValidator, "")
-            //           account.installModule(MODULE_TYPE_VALIDATOR, newValidator, installData)
+            // account.installModule(MODULE_TYPE_VALIDATOR, newValidator, installData)
             //
             // Encoded as a batch execute via executeFromExecutor.
             bytes memory uninstallCall = abi.encodeWithSignature(
                 "uninstallModule(uint256,address,bytes)",
-                1,           // MODULE_TYPE_VALIDATOR
-                address(0),  // current validator — account resolves this internally
+                1, // MODULE_TYPE_VALIDATOR
+                address(0), // current validator — account resolves this internally
                 ""
             );
             bytes memory installCall = abi.encodeWithSignature(

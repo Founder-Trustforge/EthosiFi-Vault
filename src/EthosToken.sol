@@ -2,29 +2,28 @@
 pragma solidity ^0.8.23;
 
 /**
- * @title  EthosToken
+ * @title EthosToken
  * @notice $ETHOS — Native utility and governance token of the EthosiFi Vault protocol.
- *         Fixed 100M supply. No inflation. Every Pro subscription burns 100 $ETHOS/month.
+ * Fixed 100M supply. No inflation. Every Pro subscription burns 100 $ETHOS/month.
  *
- * @dev    SECURITY FIXES (2026-08 audit):
- *         [HIGH-1] transferOwnership() was one-step. A typo in the target address
- *                  would permanently transfer protocol control to an uncontrolled
- *                  address with no recovery path. Fixed: two-step with pendingOwner.
- *         [MED-1]  burnFrom() did not check allowance when called by authorizedBurners.
- *                  This is intentional — authorized burners (staking, paymaster) are
+ * @dev SECURITY FIXES (2026-08 audit):
+ * [HIGH-1] transferOwnership() was one-step. A typo in the target address
+ * would permanently transfer protocol control to an uncontrolled
+ * address with no recovery path. Fixed: two-step with pendingOwner.
+ * [MED-1] burnFrom() did not check allowance when called by authorizedBurners.
+ * This is intentional — authorized burners (staking, paymaster) are
  *                  trusted contracts that have already verified the user's intent via
- *                  their own logic. Added explicit comment to make this clear.
- *         [MED-2]  setContracts() silently overwrites existing authorized burners
- *                  without emitting events for old burners being replaced. Fixed:
- *                  emit revoke events for old addresses before replacing.
+ * their own logic. Added explicit comment to make this clear.
+ * [MED-2] setContracts() silently overwrites existing authorized burners
+ * without emitting events for old burners being replaced. Fixed:
+ * emit revoke events for old addresses before replacing.
  */
 contract EthosToken {
-
     // ─── ERC-20 metadata ──────────────────────────────────────────────────────
 
     string public constant name     = "EthosiFi Token";
     string public constant symbol   = "$ETHOS";
-    uint8  public constant decimals = 18;
+    uint8 public constant decimals = 18;
 
     // ─── Supply ───────────────────────────────────────────────────────────────
 
@@ -34,18 +33,18 @@ contract EthosToken {
 
     // ─── Balances ─────────────────────────────────────────────────────────────
 
-    mapping(address => uint256)                            public balanceOf;
-    mapping(address => mapping(address => uint256))        public allowance;
+    mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256)) public allowance;
 
     // ─── Allocations ──────────────────────────────────────────────────────────
 
-    uint256 public constant REWARDS_POOL_ALLOC      = 40_000_000 * 1e18;
-    uint256 public constant TREASURY_ALLOC          = 20_000_000 * 1e18;
-    uint256 public constant TEAM_ALLOC              = 20_000_000 * 1e18;
-    uint256 public constant ECOSYSTEM_ALLOC         = 10_000_000 * 1e18;
-    uint256 public constant EARLY_CONTRIBUTOR_ALLOC =  5_000_000 * 1e18;
-    uint256 public constant PUBLIC_LAUNCH_ALLOC     =  5_000_000 * 1e18;
-    uint256 public constant SUBSCRIPTION_BURN       =        100 * 1e18;
+    uint256 public constant REWARDS_POOL_ALLOC = 40_000_000 * 1e18;
+    uint256 public constant TREASURY_ALLOC = 20_000_000 * 1e18;
+    uint256 public constant TEAM_ALLOC = 20_000_000 * 1e18;
+    uint256 public constant ECOSYSTEM_ALLOC = 10_000_000 * 1e18;
+    uint256 public constant EARLY_CONTRIBUTOR_ALLOC = 5_000_000 * 1e18;
+    uint256 public constant PUBLIC_LAUNCH_ALLOC = 5_000_000 * 1e18;
+    uint256 public constant SUBSCRIPTION_BURN = 100 * 1e18;
 
     // ─── Access control ───────────────────────────────────────────────────────
 
@@ -92,9 +91,9 @@ contract EthosToken {
             _earlyContributors == address(0) || _publicLaunch == address(0) ||
             _teamVesting == address(0)) revert ZeroAddress();
 
-        owner               = msg.sender;
+        owner = msg.sender;
         teamVestingContract = _teamVesting;
-        totalSupply         = TOTAL_SUPPLY;
+        totalSupply = TOTAL_SUPPLY;
 
         // Rewards pool + half team alloc held in contract for distribution
         uint256 contractAlloc = REWARDS_POOL_ALLOC + TEAM_ALLOC / 2;
@@ -124,7 +123,7 @@ contract EthosToken {
         if (balanceOf[msg.sender] < amount) revert InsufficientBalance();
         unchecked {
             balanceOf[msg.sender] -= amount;
-            balanceOf[to]         += amount;
+            balanceOf[to] += amount;
         }
         emit Transfer(msg.sender, to, amount);
         return true;
@@ -141,9 +140,9 @@ contract EthosToken {
         if (balanceOf[from] < amount) revert InsufficientBalance();
         if (allowance[from][msg.sender] < amount) revert InsufficientAllowance();
         unchecked {
-            balanceOf[from]               -= amount;
-            allowance[from][msg.sender]   -= amount;
-            balanceOf[to]                 += amount;
+            balanceOf[from] -= amount;
+            allowance[from][msg.sender] -= amount;
+            balanceOf[to] += amount;
         }
         emit Transfer(from, to, amount);
         return true;
@@ -154,8 +153,8 @@ contract EthosToken {
     /**
      * @notice Burn tokens from a specific address.
      * @dev Called by authorized protocol contracts (staking, paymaster, LP manager).
-     *      Authorized burners are trusted contracts that verify user intent through
-     *      their own access controls before calling this function.
+     * Authorized burners are trusted contracts that verify user intent through
+     * their own access controls before calling this function.
      */
     function burnFrom(address from, uint256 amount) external {
         if (!authorizedBurners[msg.sender]) revert NotAuthorizedBurner();
@@ -163,8 +162,8 @@ contract EthosToken {
         if (balanceOf[from] < amount) revert InsufficientBalance();
         unchecked {
             balanceOf[from] -= amount;
-            totalSupply     -= amount;
-            totalBurned     += amount;
+            totalSupply -= amount;
+            totalBurned += amount;
         }
         emit Transfer(from, address(0), amount);
         emit Burn(msg.sender, from, amount, totalSupply);
@@ -175,8 +174,8 @@ contract EthosToken {
         if (balanceOf[msg.sender] < amount) revert InsufficientBalance();
         unchecked {
             balanceOf[msg.sender] -= amount;
-            totalSupply           -= amount;
-            totalBurned           += amount;
+            totalSupply -= amount;
+            totalBurned += amount;
         }
         emit Transfer(msg.sender, address(0), amount);
         emit Burn(msg.sender, msg.sender, amount, totalSupply);
@@ -187,8 +186,8 @@ contract EthosToken {
         if (balanceOf[subscriber] < SUBSCRIPTION_BURN) revert InsufficientBalance();
         unchecked {
             balanceOf[subscriber] -= SUBSCRIPTION_BURN;
-            totalSupply           -= SUBSCRIPTION_BURN;
-            totalBurned           += SUBSCRIPTION_BURN;
+            totalSupply -= SUBSCRIPTION_BURN;
+            totalBurned += SUBSCRIPTION_BURN;
         }
         emit Transfer(subscriber, address(0), SUBSCRIPTION_BURN);
         emit Burn(msg.sender, subscriber, SUBSCRIPTION_BURN, totalSupply);
@@ -234,9 +233,9 @@ contract EthosToken {
             emit BurnerRevoked(liquidityManager);
         }
 
-        stakingContract    = _staking;
-        paymasterContract  = _paymaster;
-        liquidityManager   = _liquidityManager;
+        stakingContract = _staking;
+        paymasterContract = _paymaster;
+        liquidityManager = _liquidityManager;
 
         if (_staking != address(0)) { authorizedBurners[_staking] = true; emit BurnerAuthorized(_staking); }
         if (_paymaster != address(0)) { authorizedBurners[_paymaster] = true; emit BurnerAuthorized(_paymaster); }
@@ -247,7 +246,7 @@ contract EthosToken {
 
     /**
      * @dev [HIGH-1] Two-step transfer. A typo in newOwner previously resulted in
-     *      permanent, irrecoverable loss of protocol control.
+     * permanent, irrecoverable loss of protocol control.
      */
     function transferOwnership(address newOwner) external {
         if (msg.sender != owner) revert NotOwner();
@@ -259,7 +258,7 @@ contract EthosToken {
     function acceptOwnership() external {
         if (msg.sender != pendingOwner) revert NotOwner();
         emit OwnershipTransferred(owner, pendingOwner);
-        owner        = pendingOwner;
+        owner = pendingOwner;
         pendingOwner = address(0);
     }
 
@@ -270,7 +269,7 @@ contract EthosToken {
     }
 
     function burnProgress() external view returns (uint256 burned, uint256 percentBurned) {
-        burned        = totalBurned;
+        burned = totalBurned;
         percentBurned = (totalBurned * 100) / TOTAL_SUPPLY;
     }
 }

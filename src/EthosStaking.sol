@@ -17,28 +17,27 @@ interface IEthosMVPBadge {
 }
 
 /**
- * @title  EthosStaking
+ * @title EthosStaking
  * @notice Stake $ETHOS to unlock MVP membership, governance rights, and NFT badge.
  *
- * @dev    SECURITY FIXES (2026-08 audit):
- *         [HIGH-1] executeMonthlyBurn(address staker) was callable by ANY address.
- *                  An attacker could call this on every staker to burn their $ETHOS
- *                  faster than expected, forcibly drop them below the MVP threshold,
- *                  and revoke their membership and NFT badge without their knowledge.
- *                  Fixed: only the staker themselves OR the protocol owner can trigger
- *                  the monthly burn. Stakers trigger their own burn to participate in
- *                  the deflationary mechanic voluntarily.
- *         [MED-1]  stake() used transferFrom but did not verify the return value.
- *                  Fixed: require(success) on all token transfers.
- *         [MED-2]  unstake() transferred tokens before deleting state — re-entrancy
- *                  risk if EthosToken ever becomes upgradeable or non-standard.
- *                  Fixed: delete state before transfer (checks-effects-interactions).
- *         [MED-3]  transferOwnership() one-step. Fixed: two-step.
- *         [MED-4]  ReentrancyGuard applied to all state-mutating functions.
+ * @dev SECURITY FIXES (2026-08 audit):
+ * [HIGH-1] executeMonthlyBurn(address staker) was callable by ANY address.
+ * An attacker could call this on every staker to burn their $ETHOS
+ * faster than expected, forcibly drop them below the MVP threshold,
+ * and revoke their membership and NFT badge without their knowledge.
+ * Fixed: only the staker themselves OR the protocol owner can trigger
+ * the monthly burn. Stakers trigger their own burn to participate in
+ * the deflationary mechanic voluntarily.
+ * [MED-1] stake() used transferFrom but did not verify the return value.
+ * Fixed: require(success) on all token transfers.
+ * [MED-2] unstake() transferred tokens before deleting state — re-entrancy
+ * risk if EthosToken ever becomes upgradeable or non-standard.
+ * Fixed: delete state before transfer (checks-effects-interactions).
+ * [MED-3] transferOwnership() one-step. Fixed: two-step.
+ * [MED-4] ReentrancyGuard applied to all state-mutating functions.
  */
 contract EthosStaking is ReentrancyGuard {
-
-    IEthosToken    public immutable ethosToken;
+    IEthosToken public immutable ethosToken;
     IEthosMVPBadge public mvpBadge;
     address public owner;
     address public pendingOwner;
@@ -47,10 +46,10 @@ contract EthosStaking is ReentrancyGuard {
     // ─── Constants ────────────────────────────────────────────────────────────
 
     uint256 public constant MVP_STAKE_REQUIREMENT = 10_000 * 1e18;
-    uint256 public constant MONTHLY_BURN          =    100 * 1e18;
-    uint256 public constant UNSTAKE_COOLDOWN      = 7 days;
-    uint256 public constant BURN_INTERVAL         = 30 days;
-    uint8   public constant TIER_MVP              = 1;
+    uint256 public constant MONTHLY_BURN = 100 * 1e18;
+    uint256 public constant UNSTAKE_COOLDOWN = 7 days;
+    uint256 public constant BURN_INTERVAL = 30 days;
+    uint8 public constant TIER_MVP = 1;
 
     // ─── State ────────────────────────────────────────────────────────────────
 
@@ -59,7 +58,7 @@ contract EthosStaking is ReentrancyGuard {
         uint256 stakedAt;
         uint256 lastBurnAt;
         uint256 unstakeRequestAt;
-        bool    mvpActive;
+        bool mvpActive;
         uint256 governanceVotes;
     }
 
@@ -96,7 +95,7 @@ contract EthosStaking is ReentrancyGuard {
     constructor(address _ethosToken) {
         if (_ethosToken == address(0)) revert ZeroAddress();
         ethosToken = IEthosToken(_ethosToken);
-        owner      = msg.sender;
+        owner = msg.sender;
     }
 
     modifier onlyOwner() { if (msg.sender != owner) revert NotOwner(); _; }
@@ -113,13 +112,13 @@ contract EthosStaking is ReentrancyGuard {
         bool ok = ethosToken.transferFrom(msg.sender, address(this), amount);
         if (!ok) revert TransferFailed();
 
-        s.amount          = amount;
-        s.stakedAt        = block.timestamp;
-        s.lastBurnAt      = block.timestamp;
-        s.mvpActive       = true;
+        s.amount = amount;
+        s.stakedAt = block.timestamp;
+        s.lastBurnAt = block.timestamp;
+        s.mvpActive = true;
         s.governanceVotes = amount / (1000 * 1e18);
 
-        totalStaked  += amount;
+        totalStaked += amount;
         totalStakers++;
 
         if (address(mvpBadge) != address(0)) {
@@ -154,7 +153,7 @@ contract EthosStaking is ReentrancyGuard {
         uint256 amount = s.amount;
 
         // [MED-2] Effects before interaction (checks-effects-interactions)
-        totalStaked  -= amount;
+        totalStaked -= amount;
         totalStakers--;
         delete stakes[msg.sender];
 
@@ -168,7 +167,7 @@ contract EthosStaking is ReentrancyGuard {
      * @notice Execute the monthly $ETHOS burn for a staker.
      * @dev [HIGH-1] Only callable by the staker themselves or the protocol owner.
      *      This prevents attackers from forcibly burning other users' tokens and
-     *      revoking their MVP status without consent.
+     * revoking their MVP status without consent.
      */
     function executeMonthlyBurn(address staker) external nonReentrant {
         // [HIGH-1] Restrict to staker or owner only
@@ -181,8 +180,8 @@ contract EthosStaking is ReentrancyGuard {
         s.lastBurnAt = block.timestamp;
 
         if (s.amount >= MONTHLY_BURN) {
-            s.amount     -= MONTHLY_BURN;
-            totalStaked  -= MONTHLY_BURN;
+            s.amount -= MONTHLY_BURN;
+            totalStaked -= MONTHLY_BURN;
 
             // [MED-2] State updated before external call
             ethosToken.burnFrom(address(this), MONTHLY_BURN);
@@ -241,7 +240,7 @@ contract EthosStaking is ReentrancyGuard {
     function acceptOwnership() external {
         if (msg.sender != pendingOwner) revert NotOwner();
         emit OwnershipTransferred(owner, pendingOwner);
-        owner        = pendingOwner;
+        owner = pendingOwner;
         pendingOwner = address(0);
     }
 }

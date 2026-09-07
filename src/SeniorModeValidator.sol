@@ -8,52 +8,51 @@ import {PackedUserOperation} from "account-abstraction/interfaces/PackedUserOper
  * @title SeniorModeValidator
  * @notice EthosiFi Vault — Maximum protection for elderly and non-technical users.
  * @dev The fastest-growing crypto demographic is 55+. They are also the most targeted.
- *      Senior Mode activates a hardened security profile:
+ * Senior Mode activates a hardened security profile:
  *
- *      - ALL transfers require time-lock (not just high-value)
- *      - Mandatory guardian notification on every transaction
- *      - Daily spending limits (guardian-configurable)
- *      - Reduced single-transaction limits
- *      - Extended time-lock periods
- *      - Plain English confirmations on every action
- *      - Emergency contact notification on unusual activity
- *      - Zero tolerance for new/unknown addresses without guardian approval
- *      - Simplified guardian recovery (lower threshold)
+ * - ALL transfers require time-lock (not just high-value)
+ * - Mandatory guardian notification on every transaction
+ * - Daily spending limits (guardian-configurable)
+ * - Reduced single-transaction limits
+ * - Extended time-lock periods
+ * - Plain English confirmations on every action
+ * - Emergency contact notification on unusual activity
+ * - Zero tolerance for new/unknown addresses without guardian approval
+ * - Simplified guardian recovery (lower threshold)
  *
- *      Guardians (family members, caregivers) can monitor all activity
- *      and set limits remotely without accessing the vault itself.
+ * Guardians (family members, caregivers) can monitor all activity
+ * and set limits remotely without accessing the vault itself.
  *
  * Layer: UX & Accessibility (Pillar 6)
  */
 contract SeniorModeValidator is IValidator {
-
     uint256 constant MODULE_TYPE_VALIDATOR = 1;
     uint256 constant SIG_VALIDATION_SUCCESS = 0;
-    uint256 constant SIG_VALIDATION_FAILED  = 1;
+    uint256 constant SIG_VALIDATION_FAILED = 1;
 
-    uint256 public constant DEFAULT_DAILY_LIMIT      = 500 * 1e6;   // $500 USDC/day
-    uint256 public constant DEFAULT_TX_LIMIT         = 200 * 1e6;   // $200 per transaction
-    uint256 public constant DEFAULT_TIMELOCK         = 72 hours;    // 3-day delay (vs standard 48h)
-    uint256 public constant GUARDIAN_RESPONSE_WINDOW = 24 hours;    // Guardian has 24h to object
+    uint256 public constant DEFAULT_DAILY_LIMIT = 500 * 1e6; // $500 USDC/day
+    uint256 public constant DEFAULT_TX_LIMIT = 200 * 1e6; // $200 per transaction
+    uint256 public constant DEFAULT_TIMELOCK = 72 hours; // 3-day delay (vs standard 48h)
+    uint256 public constant GUARDIAN_RESPONSE_WINDOW = 24 hours; // Guardian has 24h to object
 
     struct SeniorConfig {
-        bool     initialized;
-        bool     seniorModeActive;
-        uint256  dailyLimit;            // Max spend per day
-        uint256  txLimit;               // Max per single transaction
-        uint256  timeLockDuration;      // Delay on all transfers
-        address[] guardians;            // Family members / caregivers
-        uint256  guardianThreshold;     // Approvals needed
-        bool     requireGuardianForNew; // New addresses need guardian approval
-        bool     blockWeekendTx;        // Optional: block transactions on weekends
-        uint256  blockStartHour;        // Block transactions outside of hours (0–23)
-        uint256  blockEndHour;
+        bool initialized;
+        bool seniorModeActive;
+        uint256 dailyLimit; // Max spend per day
+        uint256 txLimit; // Max per single transaction
+        uint256 timeLockDuration; // Delay on all transfers
+        address[] guardians; // Family members / caregivers
+        uint256 guardianThreshold; // Approvals needed
+        bool requireGuardianForNew; // New addresses need guardian approval
+        bool blockWeekendTx; // Optional: block transactions on weekends
+        uint256 blockStartHour; // Block transactions outside of hours (0–23)
+        uint256 blockEndHour;
         mapping(address => bool) isGuardian;
         mapping(address => bool) approvedAddresses;
     }
 
     struct DailySpend {
-        uint256 date;       // block.timestamp / 1 days
+        uint256 date; // block.timestamp / 1 days
         uint256 spent;
     }
 
@@ -62,8 +61,8 @@ contract SeniorModeValidator is IValidator {
         uint256 amount;
         uint256 submittedAt;
         uint256 guardianApprovals;
-        bool    executed;
-        bool    rejected;
+        bool executed;
+        bool rejected;
         mapping(address => bool) approved;
         mapping(address => bool) rejected_by;
     }
@@ -92,19 +91,19 @@ contract SeniorModeValidator is IValidator {
             uint256 _threshold,
             uint256 _dailyLimit,
             uint256 _txLimit,
-            bool    _requireGuardianForNew
+            bool _requireGuardianForNew
         ) = abi.decode(data, (address[], uint256, uint256, uint256, bool));
 
         SeniorConfig storage config = configs[msg.sender];
-        config.initialized           = true;
-        config.seniorModeActive      = true;
-        config.dailyLimit            = _dailyLimit > 0 ? _dailyLimit : DEFAULT_DAILY_LIMIT;
-        config.txLimit               = _txLimit > 0 ? _txLimit : DEFAULT_TX_LIMIT;
-        config.timeLockDuration      = DEFAULT_TIMELOCK;
-        config.guardianThreshold     = _threshold > 0 ? _threshold : 1;
+        config.initialized = true;
+        config.seniorModeActive = true;
+        config.dailyLimit = _dailyLimit > 0 ? _dailyLimit : DEFAULT_DAILY_LIMIT;
+        config.txLimit = _txLimit > 0 ? _txLimit : DEFAULT_TX_LIMIT;
+        config.timeLockDuration = DEFAULT_TIMELOCK;
+        config.guardianThreshold = _threshold > 0 ? _threshold : 1;
         config.requireGuardianForNew = _requireGuardianForNew;
-        config.blockStartHour        = 8;   // Default: allow 8am–8pm only
-        config.blockEndHour          = 20;
+        config.blockStartHour = 8; // Default: allow 8am–8pm only
+        config.blockEndHour = 20;
 
         for (uint256 i = 0; i < _guardians.length; i++) {
             config.guardians.push(_guardians[i]);
@@ -197,7 +196,7 @@ contract SeniorModeValidator is IValidator {
         require(configs[account].isGuardian[msg.sender], "Not a guardian");
         require(startHour < 24 && endHour <= 24 && startHour < endHour, "Invalid hours");
         configs[account].blockStartHour = startHour;
-        configs[account].blockEndHour   = endHour;
+        configs[account].blockEndHour = endHour;
     }
 
     /**
@@ -226,7 +225,7 @@ contract SeniorModeValidator is IValidator {
         DailySpend storage spend = dailySpend[account];
         uint256 today = block.timestamp / 1 days;
         if (spend.date != today) {
-            spend.date  = today;
+            spend.date = today;
             spend.spent = 0;
         }
         spend.spent += amount;

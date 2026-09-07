@@ -19,17 +19,17 @@ interface IEthosMVPBadge {
 
 /**
  * @notice Uniswap V3 Non-Fungible Position Manager interface.
- *         Used to verify that an LP token is real and owned by the caller.
+ * Used to verify that an LP token is real and owned by the caller.
  */
 interface INonfungiblePositionManager {
     struct Position {
-        uint96  nonce;
+        uint96 nonce;
         address operator;
         address token0;
         address token1;
-        uint24  fee;
-        int24   tickLower;
-        int24   tickUpper;
+        uint24 fee;
+        int24 tickLower;
+        int24 tickUpper;
         uint128 liquidity;
         uint256 feeGrowthInside0LastX128;
         uint256 feeGrowthInside1LastX128;
@@ -46,12 +46,12 @@ interface INonfungiblePositionManager {
 interface IUniswapV3Pool {
     function slot0() external view returns (
         uint160 sqrtPriceX96,
-        int24   tick,
-        uint16  observationIndex,
-        uint16  observationCardinality,
-        uint16  observationCardinalityNext,
-        uint8   feeProtocol,
-        bool    unlocked
+        int24 tick,
+        uint16 observationIndex,
+        uint16 observationCardinality,
+        uint16 observationCardinalityNext,
+        uint8 feeProtocol,
+        bool unlocked
     );
     function token0() external view returns (address);
     function token1() external view returns (address);
@@ -59,68 +59,67 @@ interface IUniswapV3Pool {
 }
 
 /**
- * @title  EthosLiquidityManager
+ * @title EthosLiquidityManager
  * @notice Manages LP provider membership with REAL on-chain Uniswap V3 verification.
- *         LP providers receive a Gold NFT badge minted directly to their wallet.
+ * LP providers receive a Gold NFT badge minted directly to their wallet.
  *
- * @dev    SECURITY FIXES (2026-08 audit):
- *         [CRIT-1] registerLP() accepted self-reported ethosAmount and usdcAmount
- *                  parameters with NO on-chain verification. Any address could call
- *                  registerLP(0, 500e6) to receive a Gold LP badge and free Pro
- *                  membership without providing any liquidity whatsoever.
- *                  Fixed: caller must provide a Uniswap V3 NFT position token ID.
- *                  The contract verifies:
- *                    (a) The NFT is owned by msg.sender (not just held).
- *                    (b) The position is in the correct $ETHOS/USDC pool.
- *                    (c) The position has non-zero liquidity.
- *                    (d) The USDC value of the position meets MIN_LP_USD_VALUE.
- *                  The NFT token ID is stored and re-verified on removeLP() to prevent
- *                  transfer-and-claim attacks (register, transfer NFT, remove LP).
- *         [CRIT-2] executeMonthlyBurn() callable by anyone — attacker could drain
+ * @dev SECURITY FIXES (2026-08 audit):
+ * [CRIT-1] registerLP() accepted self-reported ethosAmount and usdcAmount
+ * parameters with NO on-chain verification. Any address could call
+ * registerLP(0, 500e6) to receive a Gold LP badge and free Pro
+ * membership without providing any liquidity whatsoever.
+ * Fixed: caller must provide a Uniswap V3 NFT position token ID.
+ * The contract verifies:
+ * (a) The NFT is owned by msg.sender (not just held).
+ * (b) The position is in the correct $ETHOS/USDC pool.
+ * (c) The position has non-zero liquidity.
+ * (d) The USDC value of the position meets MIN_LP_USD_VALUE.
+ * The NFT token ID is stored and re-verified on removeLP() to prevent
+ * transfer-and-claim attacks (register, transfer NFT, remove LP).
+ * [CRIT-2] executeMonthlyBurn() callable by anyone — attacker could drain
  *                  LP providers' $ETHOS by triggering burns prematurely.
- *                  Fixed: only callable by the provider themselves or the owner.
- *         [HIGH-1] removeLP() subtracted from totalEthosInLP using the stored
- *                  ethosProvided amount which was self-reported and could be
- *                  type(uint256).max, causing underflow. Fixed: value now comes
- *                  from on-chain verification.
- *         [MED-1]  executeMonthlyBurn() made external call before updating state.
- *                  Fixed: checks-effects-interactions.
- *         [MED-2]  Two-step ownership added.
- *         [MED-3]  ReentrancyGuard applied to all state-mutating functions.
+ * Fixed: only callable by the provider themselves or the owner.
+ * [HIGH-1] removeLP() subtracted from totalEthosInLP using the stored
+ * ethosProvided amount which was self-reported and could be
+ * type(uint256).max, causing underflow. Fixed: value now comes
+ * from on-chain verification.
+ * [MED-1] executeMonthlyBurn() made external call before updating state.
+ * Fixed: checks-effects-interactions.
+ * [MED-2] Two-step ownership added.
+ * [MED-3] ReentrancyGuard applied to all state-mutating functions.
  *
- *         NFT MINTING: When an LP provider is verified, EthosMVPBadge.mintBadge()
- *         is called with TIER_LP (2) directly on the badge contract. The badge
- *         contract emits a Transfer(address(0), provider, tokenId) event, making
- *         the NFT visible in any ERC-721 compatible wallet (MetaMask, Rainbow, etc.).
- *         The badge is soulbound — it cannot be transferred. It is revoked automatically
- *         when the LP provider removes their position.
+ * NFT MINTING: When an LP provider is verified, EthosMVPBadge.mintBadge()
+ * is called with TIER_LP (2) directly on the badge contract. The badge
+ * contract emits a Transfer(address(0), provider, tokenId) event, making
+ * the NFT visible in any ERC-721 compatible wallet (MetaMask, Rainbow, etc.).
+ * The badge is soulbound — it cannot be transferred. It is revoked automatically
+ * when the LP provider removes their position.
  */
 contract EthosLiquidityManager is ReentrancyGuard {
-
-    IEthosToken                  public immutable ethosToken;
-    IEthosMVPBadge               public mvpBadge;
-    INonfungiblePositionManager  public positionManager;
-    address                      public ethosUsdcPool;  // $ETHOS/USDC Uniswap V3 pool
-    address                      public ethosTokenAddr; // $ETHOS token address
-    address                      public usdcTokenAddr;  // USDC token address
-    address                      public owner;
-    address                      public pendingOwner;
+    IEthosToken public immutable ethosToken;
+    IEthosMVPBadge public mvpBadge;
+    INonfungiblePositionManager public positionManager;
+    address public ethosUsdcPool; // $ETHOS/USDC Uniswap V3 pool
+    address public ethosTokenAddr; // $ETHOS token address
+    address public usdcTokenAddr; // USDC token address
+    address public owner;
+    address public pendingOwner;
 
     // ─── Constants ────────────────────────────────────────────────────────────
 
-    uint256 public constant MIN_LP_USD_VALUE = 500e6;   // $500 USDC (6 decimals)
-    uint256 public constant MONTHLY_BURN     = 100 * 1e18;
-    uint256 public constant BURN_INTERVAL    = 30 days;
-    uint8   public constant TIER_LP          = 2;
+    uint256 public constant MIN_LP_USD_VALUE = 500e6; // $500 USDC (6 decimals)
+    uint256 public constant MONTHLY_BURN = 100 * 1e18;
+    uint256 public constant BURN_INTERVAL = 30 days;
+    uint8 public constant TIER_LP = 2;
 
     // ─── State ────────────────────────────────────────────────────────────────
 
     struct LPInfo {
-        uint256 positionTokenId;    // Uniswap V3 NFT token ID (on-chain proof)
-        uint256 verifiedUsdcValue;  // USDC value at registration time
+        uint256 positionTokenId; // Uniswap V3 NFT token ID (on-chain proof)
+        uint256 verifiedUsdcValue; // USDC value at registration time
         uint256 registeredAt;
         uint256 lastBurnAt;
-        bool    active;
+        bool active;
         uint256 totalBurned;
     }
 
@@ -158,9 +157,9 @@ contract EthosLiquidityManager is ReentrancyGuard {
 
     constructor(address _ethosToken) {
         if (_ethosToken == address(0)) revert ZeroAddress();
-        ethosToken     = IEthosToken(_ethosToken);
+        ethosToken = IEthosToken(_ethosToken);
         ethosTokenAddr = _ethosToken;
-        owner          = msg.sender;
+        owner = msg.sender;
     }
 
     modifier onlyOwner() { if (msg.sender != owner) revert NotOwner(); _; }
@@ -171,17 +170,17 @@ contract EthosLiquidityManager is ReentrancyGuard {
      * @notice Register as an LP provider by proving ownership of a Uniswap V3 position.
      *
      * @param positionTokenId The Uniswap V3 NFT token ID representing your LP position
-     *                        in the $ETHOS/USDC pool. You must own this NFT.
+     * in the $ETHOS/USDC pool. You must own this NFT.
      *
      * @dev Verification steps:
-     *      1. positionManager.ownerOf(tokenId) == msg.sender
-     *      2. Position is in the approved $ETHOS/USDC pool (correct token0, token1, fee)
-     *      3. Position has non-zero liquidity
-     *      4. Computed USDC value >= MIN_LP_USD_VALUE ($500)
+     * 1. positionManager.ownerOf(tokenId) == msg.sender
+     * 2. Position is in the approved $ETHOS/USDC pool (correct token0, token1, fee)
+     * 3. Position has non-zero liquidity
+     * 4. Computed USDC value >= MIN_LP_USD_VALUE ($500)
      *
-     *      Once verified, EthosMVPBadge.mintBadge(msg.sender, TIER_LP) is called,
+     * Once verified, EthosMVPBadge.mintBadge(msg.sender, TIER_LP) is called,
      *      minting a Gold LP NFT badge directly to the provider's wallet address.
-     *      The badge is soulbound (non-transferable) and visible in any ERC-721 wallet.
+     * The badge is soulbound (non-transferable) and visible in any ERC-721 wallet.
      */
     function registerLP(uint256 positionTokenId) external nonReentrant {
         if (ethosUsdcPool == address(0) || address(positionManager) == address(0)) {
@@ -201,7 +200,7 @@ contract EthosLiquidityManager is ReentrancyGuard {
 
         // Position must contain $ETHOS and USDC (either token0 or token1)
         bool ethosIsToken0 = pos.token0 == ethosTokenAddr && pos.token1 == usdcTokenAddr;
-        bool ethosIsToken1 = pos.token0 == usdcTokenAddr  && pos.token1 == ethosTokenAddr;
+        bool ethosIsToken1 = pos.token0 == usdcTokenAddr && pos.token1 == ethosTokenAddr;
         if (!ethosIsToken0 && !ethosIsToken1) revert WrongPool();
 
         // ── Step 3: Verify non-zero liquidity ─────────────────────────────────
@@ -212,11 +211,11 @@ contract EthosLiquidityManager is ReentrancyGuard {
         if (usdcValue < MIN_LP_USD_VALUE) revert InsufficientLPValue();
 
         // ── Register ──────────────────────────────────────────────────────────
-        lp.positionTokenId   = positionTokenId;
+        lp.positionTokenId = positionTokenId;
         lp.verifiedUsdcValue = usdcValue;
-        lp.registeredAt      = block.timestamp;
-        lp.lastBurnAt        = block.timestamp;
-        lp.active            = true;
+        lp.registeredAt = block.timestamp;
+        lp.lastBurnAt = block.timestamp;
+        lp.active = true;
 
         totalLPProviders++;
 
@@ -236,8 +235,8 @@ contract EthosLiquidityManager is ReentrancyGuard {
     /**
      * @notice Remove LP position and revoke Gold badge.
      * @dev Re-verifies NFT ownership at removal time to prevent
-     *      transfer-and-claim attacks (register NFT, transfer NFT to alt wallet,
-     *      then call removeLP on the original wallet to free it for re-registration).
+     * transfer-and-claim attacks (register NFT, transfer NFT to alt wallet,
+     * then call removeLP on the original wallet to free it for re-registration).
      */
     function removeLP() external nonReentrant {
         LPInfo storage lp = lpProviders[msg.sender];
@@ -268,7 +267,7 @@ contract EthosLiquidityManager is ReentrancyGuard {
     /**
      * @notice Execute monthly burn for LP provider (100 $ETHOS burned).
      * @dev [CRIT-2] Only callable by the provider themselves or the owner.
-     *      [MED-1]  State updated before external call.
+     * [MED-1] State updated before external call.
      */
     function executeMonthlyBurn(address provider) external nonReentrant {
         if (msg.sender != provider && msg.sender != owner) revert NotAuthorized();
@@ -278,7 +277,7 @@ contract EthosLiquidityManager is ReentrancyGuard {
         if (block.timestamp < lp.lastBurnAt + BURN_INTERVAL) revert BurnIntervalNotMet();
 
         // [MED-1] Effects before interaction
-        lp.lastBurnAt   = block.timestamp;
+        lp.lastBurnAt = block.timestamp;
         lp.totalBurned += MONTHLY_BURN;
 
         // Re-verify the LP position still has liquidity before burning
@@ -312,7 +311,7 @@ contract EthosLiquidityManager is ReentrancyGuard {
             LPInfo storage lp = lpProviders[provider];
             if (!lp.active || block.timestamp < lp.lastBurnAt + BURN_INTERVAL) continue;
 
-            lp.lastBurnAt   = block.timestamp;
+            lp.lastBurnAt = block.timestamp;
             lp.totalBurned += MONTHLY_BURN;
 
             ethosToken.burnSubscriptionFee(provider);
@@ -324,20 +323,20 @@ contract EthosLiquidityManager is ReentrancyGuard {
 
     /**
      * @dev Estimates the USDC value of a Uniswap V3 position using the current
-     *      pool price (sqrtPriceX96). This is an approximation — it uses the
+     * pool price (sqrtPriceX96). This is an approximation — it uses the
      *      current tick midpoint and the position's liquidity to estimate token amounts.
      *
-     *      For positions that are fully in range, this is accurate.
-     *      For out-of-range positions (liquidity == 0), we already revert above.
+     * For positions that are fully in range, this is accurate.
+     * For out-of-range positions (liquidity == 0), we already revert above.
      *
-     *      We use the simpler token amounts approach: for a position with active
-     *      liquidity, the USDC portion (either token0 or token1) must be >= MIN_LP_USD_VALUE.
-     *      We read tokensOwed as a proxy for minimum USDC contributed.
+     * We use the simpler token amounts approach: for a position with active
+     * liquidity, the USDC portion (either token0 or token1) must be >= MIN_LP_USD_VALUE.
+     * We read tokensOwed as a proxy for minimum USDC contributed.
      *
      *      Production note: For a more precise calculation, integrate with Uniswap's
-     *      LiquidityAmounts library. The minimum approach here is intentionally
-     *      conservative — it ensures the position has at minimum $500 USDC exposure
-     *      without requiring complex sqrt math.
+     * LiquidityAmounts library. The minimum approach here is intentionally
+     * conservative — it ensures the position has at minimum $500 USDC exposure
+     * without requiring complex sqrt math.
      */
     function _computeUsdcValue(
         INonfungiblePositionManager.Position memory pos,
@@ -389,7 +388,7 @@ contract EthosLiquidityManager is ReentrancyGuard {
 
     /**
      * @notice Configure the Uniswap V3 pool and position manager.
-     *         Must be called before any LP can register.
+     * Must be called before any LP can register.
      */
     function configurePool(
         address _positionManager,
@@ -400,9 +399,9 @@ contract EthosLiquidityManager is ReentrancyGuard {
         if (_positionManager == address(0) || _pool == address(0) ||
             _ethosToken == address(0) || _usdc == address(0)) revert ZeroAddress();
         positionManager = INonfungiblePositionManager(_positionManager);
-        ethosUsdcPool   = _pool;
-        ethosTokenAddr  = _ethosToken;
-        usdcTokenAddr   = _usdc;
+        ethosUsdcPool = _pool;
+        ethosTokenAddr = _ethosToken;
+        usdcTokenAddr = _usdc;
         emit PoolConfigured(_pool, _ethosToken, _usdc);
     }
 
@@ -421,7 +420,7 @@ contract EthosLiquidityManager is ReentrancyGuard {
     function acceptOwnership() external {
         if (msg.sender != pendingOwner) revert NotOwner();
         emit OwnershipTransferred(owner, pendingOwner);
-        owner        = pendingOwner;
+        owner = pendingOwner;
         pendingOwner = address(0);
     }
 
@@ -436,7 +435,7 @@ contract EthosLiquidityManager is ReentrancyGuard {
         uint256 verifiedUsdcValue,
         uint256 registeredAt,
         uint256 nextBurnAt,
-        bool    active,
+        bool active,
         uint256 totalBurned
     ) {
         LPInfo storage lp = lpProviders[provider];
@@ -448,7 +447,7 @@ contract EthosLiquidityManager is ReentrancyGuard {
 
     /**
      * @notice Check if a Uniswap V3 position meets the LP requirements.
-     *         Call this before registerLP() to preview eligibility.
+     * Call this before registerLP() to preview eligibility.
      */
     function checkEligibility(uint256 positionTokenId) external view returns (
         bool eligible,
@@ -474,7 +473,7 @@ contract EthosLiquidityManager is ReentrancyGuard {
             positionManager.positions(positionTokenId);
 
         bool ethosIsToken0 = pos.token0 == ethosTokenAddr && pos.token1 == usdcTokenAddr;
-        bool ethosIsToken1 = pos.token0 == usdcTokenAddr  && pos.token1 == ethosTokenAddr;
+        bool ethosIsToken1 = pos.token0 == usdcTokenAddr && pos.token1 == ethosTokenAddr;
 
         if (!ethosIsToken0 && !ethosIsToken1) {
             return (false, "Position is not in the EthosiFi ETHOS/USDC pool", 0);

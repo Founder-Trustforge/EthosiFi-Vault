@@ -7,25 +7,24 @@ import {IModule} from "erc7579/interfaces/IModule.sol";
  * @title EmergencyFreeze
  * @notice EthosiFi Vault — Instant panic button for any authorized guardian.
  * @dev Any guardian can freeze ALL outgoing transactions in a single call.
- *      No delay. No consensus. Activates in one block.
- *      Requires guardian multi-sig consensus to unfreeze.
- *      This closes the attack window the moment suspicious activity is detected.
+ * No delay. No consensus. Activates in one block.
+ * Requires guardian multi-sig consensus to unfreeze.
+ * This closes the attack window the moment suspicious activity is detected.
  *
  * Layer: Core Security
  */
 contract EmergencyFreeze is IModule {
-
     uint256 constant MODULE_TYPE_HOOK = 4;
 
     struct FreezeConfig {
         bool initialized;
         bool frozen;
         address[] guardians;
-        uint256 unfreezeThreshold;     // Guardian votes needed to unfreeze
+        uint256 unfreezeThreshold; // Guardian votes needed to unfreeze
         uint256 frozenAt;
         address frozenBy;
         uint256 unfreezeVotes;
-        uint256 autoExpiry;            // Optional: freeze auto-expires after X seconds (0 = never)
+        uint256 autoExpiry; // Optional: freeze auto-expires after X seconds (0 = never)
         mapping(address => bool) isGuardian;
         mapping(address => bool) hasVotedToUnfreeze;
     }
@@ -100,7 +99,7 @@ contract EmergencyFreeze is IModule {
     /**
      * @notice Vote to unfreeze. Requires multi-sig consensus.
      * @dev Multiple guardians must agree before unfreezing.
-     *      This prevents a single malicious guardian from unfreezing after a legitimate freeze.
+     * This prevents a single malicious guardian from unfreezing after a legitimate freeze.
      */
     function voteToUnfreeze(address account) external {
         FreezeConfig storage config = configs[account];

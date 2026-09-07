@@ -5,27 +5,26 @@ import {IERC7579Account} from "erc7579/interfaces/IERC7579Account.sol";
 import {ReentrancyGuard} from "solady/utils/ReentrancyGuard.sol";
 
 /**
- * @title  VaultFactory
+ * @title VaultFactory
  * @author EthosiFi (founder@ethosifi.com)
  * @notice One-click EthosiFi Vault deployment — all modules pre-installed.
  *
- * @dev    SECURITY FIXES (2026-08 audit):
- *         [CRIT-1] _getProxyBytecode() built the 45-byte EIP-1167 runtime body
- *                  and passed it directly to CREATE2 as init code. CREATE2 executed
- *                  it as a constructor, which delegatecalled the implementation with
- *                  empty calldata, returned zero bytes, and deployed a codeless address.
- *                  All ETH sent to such a vault is permanently unrecoverable.
- *                  Fixed: prepend the 10-byte deployer stub (3d602d80600a3d3981f3).
- *         [CRIT-2] No post-deploy extcodesize check. Fixed: revert if deployed
- *                  address has zero code.
- *         [HIGH-1] createVault() had no reentrancy guard. Fixed: ReentrancyGuard.
- *         [MED-1]  transferOwnership() was one-step. Fixed: two-step with pendingOwner.
+ * @dev SECURITY FIXES (2026-08 audit):
+ * [CRIT-1] _getProxyBytecode() built the 45-byte EIP-1167 runtime body
+ * and passed it directly to CREATE2 as init code. CREATE2 executed
+ * it as a constructor, which delegatecalled the implementation with
+ * empty calldata, returned zero bytes, and deployed a codeless address.
+ * All ETH sent to such a vault is permanently unrecoverable.
+ * Fixed: prepend the 10-byte deployer stub (3d602d80600a3d3981f3).
+ * [CRIT-2] No post-deploy extcodesize check. Fixed: revert if deployed
+ * address has zero code.
+ * [HIGH-1] createVault() had no reentrancy guard. Fixed: ReentrancyGuard.
+ * [MED-1] transferOwnership() was one-step. Fixed: two-step with pendingOwner.
  */
 contract VaultFactory is ReentrancyGuard {
-
     uint256 private constant TYPE_VALIDATOR = 1;
-    uint256 private constant TYPE_EXECUTOR  = 2;
-    uint256 private constant TYPE_HOOK      = 4;
+    uint256 private constant TYPE_EXECUTOR = 2;
+    uint256 private constant TYPE_HOOK = 4;
 
     // ─── Module registry ──────────────────────────────────────────────────────
 
@@ -55,13 +54,13 @@ contract VaultFactory is ReentrancyGuard {
         address vaultAddress;
         address vaultOwner;
         uint256 deployedAt;
-        bool    seniorMode;
+        bool seniorMode;
         bytes32 salt;
         uint256 modulesFailed;
     }
 
     mapping(address => VaultDeployment) public vaults;
-    mapping(address => bool)            public isEthosiFiVault;
+    mapping(address => bool) public isEthosiFiVault;
 
     // ─── Events ───────────────────────────────────────────────────────────────
 
@@ -87,10 +86,10 @@ contract VaultFactory is ReentrancyGuard {
     // ─── Constructor ──────────────────────────────────────────────────────────
 
     constructor(address _entryPoint, address _accountImplementation) {
-        if (_entryPoint == address(0))            revert ZeroAddress();
+        if (_entryPoint == address(0)) revert ZeroAddress();
         if (_accountImplementation == address(0)) revert ZeroAddress();
-        owner                 = msg.sender;
-        entryPoint            = _entryPoint;
+        owner = msg.sender;
+        entryPoint = _entryPoint;
         accountImplementation = _accountImplementation;
     }
 
@@ -102,24 +101,23 @@ contract VaultFactory is ReentrancyGuard {
     // ─── Vault creation ───────────────────────────────────────────────────────
 
     function createVault(
-        bytes32    credentialId,
+        bytes32 credentialId,
         uint256[2] calldata pubKey,
-        bytes32    rpIdHash,
-        address[]  calldata guardianAddresses,
-        uint256[]  calldata guardianWeights,
-        uint256    guardianThreshold,
-        address    feeToken,
-        bool       seniorMode,
-        bytes32    salt
+        bytes32 rpIdHash,
+        address[] calldata guardianAddresses,
+        uint256[] calldata guardianWeights,
+        uint256 guardianThreshold,
+        address feeToken,
+        bool seniorMode,
+        bytes32 salt
     ) external nonReentrant returns (address vault) {
-
-        if (credentialId == bytes32(0))                         revert InvalidCredential();
-        if (pubKey[0] == 0 || pubKey[1] == 0)                   revert InvalidCredential();
-        if (guardianAddresses.length == 0)                      revert NoGuardians();
+        if (credentialId == bytes32(0)) revert InvalidCredential();
+        if (pubKey[0] == 0 || pubKey[1] == 0) revert InvalidCredential();
+        if (guardianAddresses.length == 0) revert NoGuardians();
         if (guardianAddresses.length != guardianWeights.length) revert InvalidThreshold();
         if (guardianThreshold == 0 ||
-            guardianThreshold > _sumWeights(guardianWeights))   revert InvalidThreshold();
-        if (accountImplementation == address(0))                revert ImplementationNotSet();
+            guardianThreshold > _sumWeights(guardianWeights)) revert InvalidThreshold();
+        if (accountImplementation == address(0)) revert ImplementationNotSet();
 
         bytes32 finalSalt = keccak256(abi.encodePacked(msg.sender, salt));
         vault = _deployProxy(finalSalt);
@@ -137,11 +135,11 @@ contract VaultFactory is ReentrancyGuard {
 
         totalVaultsDeployed++;
         vaults[vault] = VaultDeployment({
-            vaultAddress:  vault,
-            vaultOwner:    msg.sender,
-            deployedAt:    block.timestamp,
-            seniorMode:    seniorMode,
-            salt:          finalSalt,
+            vaultAddress: vault,
+            vaultOwner: msg.sender,
+            deployedAt: block.timestamp,
+            seniorMode: seniorMode,
+            salt: finalSalt,
             modulesFailed: failedModules
         });
         isEthosiFiVault[vault] = true;
@@ -151,7 +149,7 @@ contract VaultFactory is ReentrancyGuard {
 
     function computeVaultAddress(address creator, bytes32 salt) external view returns (address) {
         if (accountImplementation == address(0)) revert ImplementationNotSet();
-        bytes32 finalSalt    = keccak256(abi.encodePacked(creator, salt));
+        bytes32 finalSalt = keccak256(abi.encodePacked(creator, salt));
         // [CRIT-1] Use creation bytecode hash (55 bytes) not runtime bytecode hash (45 bytes)
         bytes32 bytecodeHash = keccak256(_getProxyBytecode(accountImplementation));
         bytes32 hash = keccak256(abi.encodePacked(
@@ -253,25 +251,25 @@ contract VaultFactory is ReentrancyGuard {
     /**
      * @dev EIP-1167 CREATION code = 10-byte deployer stub + 45-byte runtime = 55 bytes.
      *
-     *      [CRIT-1] Previously this function returned only the 45-byte runtime body.
-     *      When passed to CREATE2 as init code, the EVM executed the runtime body as a
-     *      constructor: it delegatecalled the implementation with empty calldata, got back
-     *      zero bytes, and deployed a codeless address. CREATE2 reported success, events
-     *      were emitted, but every vault was permanently codeless. Any ETH sent to it
-     *      was unrecoverable.
+     * [CRIT-1] Previously this function returned only the 45-byte runtime body.
+     * When passed to CREATE2 as init code, the EVM executed the runtime body as a
+     * constructor: it delegatecalled the implementation with empty calldata, got back
+     * zero bytes, and deployed a codeless address. CREATE2 reported success, events
+     * were emitted, but every vault was permanently codeless. Any ETH sent to it
+     * was unrecoverable.
      *
-     *      Fix: prepend the 10-byte deployer stub that copies the 45-byte runtime body
-     *      into memory and returns it as the deployed code.
+     * Fix: prepend the 10-byte deployer stub that copies the 45-byte runtime body
+     * into memory and returns it as the deployed code.
      *
-     *      Stub bytes: 3d 60 2d 80 60 0a 3d 39 81 f3
-     *        3d  RETURNDATASIZE  (0)
-     *        60 2d PUSH1 45      (length of runtime body)
-     *        80  DUP1
-     *        60 0a PUSH1 10      (offset of runtime body in this init code)
-     *        3d  RETURNDATASIZE  (0 — destination in memory)
-     *        39  CODECOPY        (copy 45 bytes from offset 10 into mem[0..44])
-     *        81  DUP2
-     *        f3  RETURN          (return mem[0..44] as deployed code)
+     * Stub bytes: 3d 60 2d 80 60 0a 3d 39 81 f3
+     * 3d RETURNDATASIZE (0)
+     * 60 2d PUSH1 45 (length of runtime body)
+     * 80 DUP1
+     * 60 0a PUSH1 10 (offset of runtime body in this init code)
+     * 3d RETURNDATASIZE (0 — destination in memory)
+     * 39 CODECOPY (copy 45 bytes from offset 10 into mem[0..44])
+     * 81 DUP2
+     * f3 RETURN (return mem[0..44] as deployed code)
      */
     function _getProxyBytecode(address impl) internal pure returns (bytes memory) {
         bytes20 implBytes = bytes20(impl);
@@ -315,13 +313,13 @@ contract VaultFactory is ReentrancyGuard {
         bytes memory arr = new bytes(addrs.length * 96);
         for (uint256 i = 0; i < addrs.length; i++) {
             uint256 offset = i * 96;
-            bytes32 addr32   = bytes32(uint256(uint160(addrs[i])));
+            bytes32 addr32 = bytes32(uint256(uint160(addrs[i])));
             bytes32 weight32 = bytes32(weights[i]);
             bytes32 identity = bytes32(0);
             assembly {
-                mstore(add(add(arr, 32), offset),            addr32)
-                mstore(add(add(arr, 32), add(offset, 32)),   weight32)
-                mstore(add(add(arr, 32), add(offset, 64)),   identity)
+                mstore(add(add(arr, 32), offset), addr32)
+                mstore(add(add(arr, 32), add(offset, 32)), weight32)
+                mstore(add(add(arr, 32), add(offset, 64)), identity)
             }
         }
         return abi.encode(arr, threshold);
@@ -335,22 +333,22 @@ contract VaultFactory is ReentrancyGuard {
 
     function setModules(
         address _timeLock, address _biometric, address _guardian,
-        address _freeze,   address _poison,    address _scam,
-        address _plainEnglish, address _ai,    address _deepfake,
+        address _freeze, address _poison, address _scam,
+        address _plainEnglish, address _ai, address _deepfake,
         address _upgradeGuard, address _paymaster, address _senior
     ) external onlyOwner {
-        timeLockValidator         = _timeLock;
-        biometricValidator        = _biometric;
-        guardianValidator         = _guardian;
-        emergencyFreeze           = _freeze;
+        timeLockValidator = _timeLock;
+        biometricValidator = _biometric;
+        guardianValidator = _guardian;
+        emergencyFreeze = _freeze;
         poisonedAddressProtection = _poison;
-        antiScamScreener          = _scam;
-        plainEnglishExecutor      = _plainEnglish;
-        aiThreatOracle            = _ai;
-        deepfakeGuard             = _deepfake;
-        multiSigUpgradeGuard      = _upgradeGuard;
-        paymasterManager          = _paymaster;
-        seniorModeValidator       = _senior;
+        antiScamScreener = _scam;
+        plainEnglishExecutor = _plainEnglish;
+        aiThreatOracle = _ai;
+        deepfakeGuard = _deepfake;
+        multiSigUpgradeGuard = _upgradeGuard;
+        paymasterManager = _paymaster;
+        seniorModeValidator = _senior;
         emit ModuleRegistryUpdated();
     }
 
@@ -369,7 +367,7 @@ contract VaultFactory is ReentrancyGuard {
     function acceptOwnership() external {
         if (msg.sender != pendingOwner) revert NotPendingOwner();
         emit OwnershipTransferred(owner, pendingOwner);
-        owner        = pendingOwner;
+        owner = pendingOwner;
         pendingOwner = address(0);
     }
 
