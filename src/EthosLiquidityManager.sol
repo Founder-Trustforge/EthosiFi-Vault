@@ -44,15 +44,18 @@ interface INonfungiblePositionManager {
  * @notice Uniswap V3 pool interface — used to verify current liquidity and price.
  */
 interface IUniswapV3Pool {
-    function slot0() external view returns (
-        uint160 sqrtPriceX96,
-        int24 tick,
-        uint16 observationIndex,
-        uint16 observationCardinality,
-        uint16 observationCardinalityNext,
-        uint8 feeProtocol,
-        bool unlocked
-    );
+    function slot0()
+        external
+        view
+        returns (
+            uint160 sqrtPriceX96,
+            int24 tick,
+            uint16 observationIndex,
+            uint16 observationCardinality,
+            uint16 observationCardinalityNext,
+            uint8 feeProtocol,
+            bool unlocked
+        );
     function token0() external view returns (address);
     function token1() external view returns (address);
     function liquidity() external view returns (uint128);
@@ -162,7 +165,10 @@ contract EthosLiquidityManager is ReentrancyGuard {
         owner = msg.sender;
     }
 
-    modifier onlyOwner() { if (msg.sender != owner) revert NotOwner(); _; }
+    modifier onlyOwner() {
+        if (msg.sender != owner) revert NotOwner();
+        _;
+    }
 
     // ─── LP registration with real on-chain verification ──────────────────────
 
@@ -195,8 +201,7 @@ contract EthosLiquidityManager is ReentrancyGuard {
         if (nftOwner != msg.sender) revert NotPositionOwner();
 
         // ── Step 2: Verify position is in correct pool ────────────────────────
-        INonfungiblePositionManager.Position memory pos =
-            positionManager.positions(positionTokenId);
+        INonfungiblePositionManager.Position memory pos = positionManager.positions(positionTokenId);
 
         // Position must contain $ETHOS and USDC (either token0 or token1)
         bool ethosIsToken0 = pos.token0 == ethosTokenAddr && pos.token1 == usdcTokenAddr;
@@ -281,8 +286,7 @@ contract EthosLiquidityManager is ReentrancyGuard {
         lp.totalBurned += MONTHLY_BURN;
 
         // Re-verify the LP position still has liquidity before burning
-        INonfungiblePositionManager.Position memory pos =
-            positionManager.positions(lp.positionTokenId);
+        INonfungiblePositionManager.Position memory pos = positionManager.positions(lp.positionTokenId);
         if (pos.liquidity == 0) {
             // Position is empty — auto-remove
             lp.active = false;
@@ -338,10 +342,11 @@ contract EthosLiquidityManager is ReentrancyGuard {
      * conservative — it ensures the position has at minimum $500 USDC exposure
      * without requiring complex sqrt math.
      */
-    function _computeUsdcValue(
-        INonfungiblePositionManager.Position memory pos,
-        bool ethosIsToken0
-    ) internal view returns (uint256 usdcValue) {
+    function _computeUsdcValue(INonfungiblePositionManager.Position memory pos, bool ethosIsToken0)
+        internal
+        view
+        returns (uint256 usdcValue)
+    {
         // Get current pool price
         (uint160 sqrtPriceX96,,,,,,) = IUniswapV3Pool(ethosUsdcPool).slot0();
 
@@ -390,14 +395,14 @@ contract EthosLiquidityManager is ReentrancyGuard {
      * @notice Configure the Uniswap V3 pool and position manager.
      * Must be called before any LP can register.
      */
-    function configurePool(
-        address _positionManager,
-        address _pool,
-        address _ethosToken,
-        address _usdc
-    ) external onlyOwner {
-        if (_positionManager == address(0) || _pool == address(0) ||
-            _ethosToken == address(0) || _usdc == address(0)) revert ZeroAddress();
+    function configurePool(address _positionManager, address _pool, address _ethosToken, address _usdc)
+        external
+        onlyOwner
+    {
+        if (
+            _positionManager == address(0) || _pool == address(0) || _ethosToken == address(0)
+                || _usdc == address(0)
+        ) revert ZeroAddress();
         positionManager = INonfungiblePositionManager(_positionManager);
         ethosUsdcPool = _pool;
         ethosTokenAddr = _ethosToken;
@@ -430,18 +435,26 @@ contract EthosLiquidityManager is ReentrancyGuard {
         return lpProviders[provider].active;
     }
 
-    function getLPInfo(address provider) external view returns (
-        uint256 positionTokenId,
-        uint256 verifiedUsdcValue,
-        uint256 registeredAt,
-        uint256 nextBurnAt,
-        bool active,
-        uint256 totalBurned
-    ) {
+    function getLPInfo(address provider)
+        external
+        view
+        returns (
+            uint256 positionTokenId,
+            uint256 verifiedUsdcValue,
+            uint256 registeredAt,
+            uint256 nextBurnAt,
+            bool active,
+            uint256 totalBurned
+        )
+    {
         LPInfo storage lp = lpProviders[provider];
         return (
-            lp.positionTokenId, lp.verifiedUsdcValue, lp.registeredAt,
-            lp.lastBurnAt + BURN_INTERVAL, lp.active, lp.totalBurned
+            lp.positionTokenId,
+            lp.verifiedUsdcValue,
+            lp.registeredAt,
+            lp.lastBurnAt + BURN_INTERVAL,
+            lp.active,
+            lp.totalBurned
         );
     }
 
@@ -449,11 +462,11 @@ contract EthosLiquidityManager is ReentrancyGuard {
      * @notice Check if a Uniswap V3 position meets the LP requirements.
      * Call this before registerLP() to preview eligibility.
      */
-    function checkEligibility(uint256 positionTokenId) external view returns (
-        bool eligible,
-        string memory reason,
-        uint256 usdcValue
-    ) {
+    function checkEligibility(uint256 positionTokenId)
+        external
+        view
+        returns (bool eligible, string memory reason, uint256 usdcValue)
+    {
         if (ethosUsdcPool == address(0) || address(positionManager) == address(0)) {
             return (false, "Pool not configured", 0);
         }
@@ -469,8 +482,7 @@ contract EthosLiquidityManager is ReentrancyGuard {
             return (false, "You do not own this position NFT", 0);
         }
 
-        INonfungiblePositionManager.Position memory pos =
-            positionManager.positions(positionTokenId);
+        INonfungiblePositionManager.Position memory pos = positionManager.positions(positionTokenId);
 
         bool ethosIsToken0 = pos.token0 == ethosTokenAddr && pos.token1 == usdcTokenAddr;
         bool ethosIsToken1 = pos.token0 == usdcTokenAddr && pos.token1 == ethosTokenAddr;

@@ -98,7 +98,10 @@ contract EthosStaking is ReentrancyGuard {
         owner = msg.sender;
     }
 
-    modifier onlyOwner() { if (msg.sender != owner) revert NotOwner(); _; }
+    modifier onlyOwner() {
+        if (msg.sender != owner) revert NotOwner();
+        _;
+    }
 
     // ─── Staking ──────────────────────────────────────────────────────────────
 
@@ -209,13 +212,24 @@ contract EthosStaking is ReentrancyGuard {
         return stakes[account].mvpActive ? stakes[account].governanceVotes : 0;
     }
 
-    function getStakeInfo(address account) external view returns (
-        uint256 amount, uint256 stakedAt, bool mvpActive,
-        uint256 governanceVotes, uint256 nextBurnAt, uint256 unstakeAvailableAt
-    ) {
+    function getStakeInfo(address account)
+        external
+        view
+        returns (
+            uint256 amount,
+            uint256 stakedAt,
+            bool mvpActive,
+            uint256 governanceVotes,
+            uint256 nextBurnAt,
+            uint256 unstakeAvailableAt
+        )
+    {
         StakeInfo storage s = stakes[account];
         return (
-            s.amount, s.stakedAt, s.mvpActive, s.governanceVotes,
+            s.amount,
+            s.stakedAt,
+            s.mvpActive,
+            s.governanceVotes,
             s.lastBurnAt + BURN_INTERVAL,
             s.unstakeRequestAt > 0 ? s.unstakeRequestAt + UNSTAKE_COOLDOWN : 0
         );

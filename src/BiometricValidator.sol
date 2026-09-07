@@ -113,19 +113,9 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
     // Events
     // ─────────────────────────────────────────────────────────────
 
-    event CredentialRegistered(
-        address indexed account,
-        bytes32 indexed credentialId,
-        bool isPrimary
-    );
-    event CredentialRevoked(
-        address indexed account,
-        bytes32 indexed credentialId
-    );
-    event PrimaryCredentialChanged(
-        address indexed account,
-        bytes32 indexed credentialId
-    );
+    event CredentialRegistered(address indexed account, bytes32 indexed credentialId, bool isPrimary);
+    event CredentialRevoked(address indexed account, bytes32 indexed credentialId);
+    event PrimaryCredentialChanged(address indexed account, bytes32 indexed credentialId);
 
     // ─────────────────────────────────────────────────────────────
     // Errors
@@ -168,11 +158,7 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
         if (rpIdHash == bytes32(0)) revert InvalidRpIdHash();
         if (_credentials[credentialId].active) revert CredentialAlreadyExists();
 
-        _credentials[credentialId] = Credential({
-            publicKey: pubKey,
-            active: true,
-            registeredAt: block.timestamp
-        });
+        _credentials[credentialId] = Credential({publicKey: pubKey, active: true, registeredAt: block.timestamp});
 
         _accountCredentials[msg.sender].push(credentialId);
         _primaryCredential[msg.sender] = credentialId;
@@ -210,15 +196,18 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
         PackedUserOperation calldata userOp,
         bytes32 userOpHash,
         uint256 /* missingAccountFunds */
-    ) external override nonReentrant returns (uint256) {
+    )
+        external
+        override
+        nonReentrant
+        returns (uint256)
+    {
         if (!_initialized[msg.sender]) revert NotInitialized();
 
         WebAuthnSignature memory sig = abi.decode(userOp.signature, (WebAuthnSignature));
 
         // Use credentialId from signature, fall back to primary
-        bytes32 credId = sig.credentialId != bytes32(0)
-            ? sig.credentialId
-            : _primaryCredential[msg.sender];
+        bytes32 credId = sig.credentialId != bytes32(0) ? sig.credentialId : _primaryCredential[msg.sender];
 
         if (credId == bytes32(0)) revert NoCredential();
 
@@ -234,17 +223,21 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
      * @return 0x1626ba7e on success, 0xffffffff on failure.
      */
     function isValidSignatureWithSender(
-        address /* sender */,
+        address,
+        /* sender */
         bytes32 hash,
         bytes calldata signature
-    ) external view override returns (bytes4) {
+    )
+        external
+        view
+        override
+        returns (bytes4)
+    {
         if (!_initialized[msg.sender]) return 0xffffffff;
 
         WebAuthnSignature memory sig = abi.decode(signature, (WebAuthnSignature));
 
-        bytes32 credId = sig.credentialId != bytes32(0)
-            ? sig.credentialId
-            : _primaryCredential[msg.sender];
+        bytes32 credId = sig.credentialId != bytes32(0) ? sig.credentialId : _primaryCredential[msg.sender];
 
         if (credId == bytes32(0)) return 0xffffffff;
 
@@ -263,20 +256,13 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
      * @notice Add an additional credential (e.g. a second device).
      * Only callable by the account itself.
      */
-    function addCredential(
-        bytes32 credentialId,
-        uint256[2] calldata pubKey
-    ) external {
+    function addCredential(bytes32 credentialId, uint256[2] calldata pubKey) external {
         if (!_initialized[msg.sender]) revert NotInitialized();
         if (credentialId == bytes32(0)) revert NoCredential();
         if (pubKey[0] == 0 || pubKey[1] == 0) revert InvalidPublicKey();
         if (_credentials[credentialId].active) revert CredentialAlreadyExists();
 
-        _credentials[credentialId] = Credential({
-            publicKey: pubKey,
-            active: true,
-            registeredAt: block.timestamp
-        });
+        _credentials[credentialId] = Credential({publicKey: pubKey, active: true, registeredAt: block.timestamp});
         _accountCredentials[msg.sender].push(credentialId);
 
         emit CredentialRegistered(msg.sender, credentialId, false);
@@ -327,11 +313,11 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
     // View helpers
     // ─────────────────────────────────────────────────────────────
 
-    function getCredential(bytes32 credentialId) external view returns (
-        uint256[2] memory publicKey,
-        bool active,
-        uint256 registeredAt
-    ) {
+    function getCredential(bytes32 credentialId)
+        external
+        view
+        returns (uint256[2] memory publicKey, bool active, uint256 registeredAt)
+    {
         Credential storage c = _credentials[credentialId];
         return (c.publicKey, c.active, c.registeredAt);
     }
@@ -411,14 +397,10 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
         // ── Step 6: Compute signed message ───────────────────────
         // signedMessage = sha256(authenticatorData ‖ sha256(clientDataJSON))
         bytes32 clientDataHash = sha256(sig.clientDataJSON);
-        bytes32 signedMessage = sha256(
-            abi.encodePacked(sig.authenticatorData, clientDataHash)
-        );
+        bytes32 signedMessage = sha256(abi.encodePacked(sig.authenticatorData, clientDataHash));
 
         // ── Step 7: Replay protection ─────────────────────────────
-        bytes32 assertionHash = keccak256(
-            abi.encodePacked(sig.authenticatorData, sig.clientDataJSON)
-        );
+        bytes32 assertionHash = keccak256(abi.encodePacked(sig.authenticatorData, sig.clientDataJSON));
         if (_usedAssertions[assertionHash]) revert ReplayDetected();
         _usedAssertions[assertionHash] = true;
 
@@ -436,11 +418,11 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
      *         - Daimo's p256-verifier (https://github.com/daimo-eth/p256-verifier)
      * - FCL (https: //github.com/rdubois-crypto/FreshCryptoLib)
      */
-    function _verifyP256(
-        bytes32 messageHash,
-        uint256[2] memory rs,
-        uint256[2] storage pubKey
-    ) internal view returns (bool) {
+    function _verifyP256(bytes32 messageHash, uint256[2] memory rs, uint256[2] storage pubKey)
+        internal
+        view
+        returns (bool)
+    {
         bytes memory input = abi.encode(
             messageHash,
             rs[0], // r
@@ -470,8 +452,9 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
     function _containsType(bytes memory clientDataJSON) internal pure returns (bool) {
         bytes memory needle = bytes('"type":"webauthn.get"');
         bytes memory needle2 = bytes('"type": "webauthn.get"');
-        return _indexOf(clientDataJSON, needle) != type(uint256).max
-            || _indexOf(clientDataJSON, needle2) != type(uint256).max;
+        return
+            _indexOf(clientDataJSON, needle) != type(uint256).max
+                || _indexOf(clientDataJSON, needle2) != type(uint256).max;
     }
 
     /**
@@ -484,11 +467,11 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
      * it to the bytes in clientDataJSON at [challengeOffset, challengeOffset+43].
      * (32 bytes base64url-encoded = 43 characters, no padding)
      */
-    function _verifyChallenge(
-        bytes memory clientDataJSON,
-        uint256 offset,
-        bytes32 expectedChallenge
-    ) internal pure returns (bool) {
+    function _verifyChallenge(bytes memory clientDataJSON, uint256 offset, bytes32 expectedChallenge)
+        internal
+        pure
+        returns (bool)
+    {
         // base64url of 32 bytes = 43 chars (no padding)
         uint256 encodedLen = 43;
         if (offset + encodedLen > clientDataJSON.length) return false;
@@ -527,7 +510,7 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
             if (resultIdx < actualLen) result[resultIdx++] = TABLE[(triple >> 18) & 0x3F];
             if (resultIdx < actualLen) result[resultIdx++] = TABLE[(triple >> 12) & 0x3F];
             if (resultIdx < actualLen) result[resultIdx++] = TABLE[(triple >> 6) & 0x3F];
-            if (resultIdx < actualLen) result[resultIdx++] = TABLE[ triple & 0x3F];
+            if (resultIdx < actualLen) result[resultIdx++] = TABLE[triple & 0x3F];
         }
 
         return result;
@@ -537,11 +520,7 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
      * @dev Find the first occurrence of needle in haystack.
      * Returns type(uint256).max if not found.
      */
-    function _indexOf(bytes memory haystack, bytes memory needle)
-        internal
-        pure
-        returns (uint256)
-    {
+    function _indexOf(bytes memory haystack, bytes memory needle) internal pure returns (uint256) {
         if (needle.length == 0 || needle.length > haystack.length) {
             return type(uint256).max;
         }
@@ -562,11 +541,7 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
     // Internal — credential helpers
     // ─────────────────────────────────────────────────────────────
 
-    function _isAccountCredential(address account, bytes32 credId)
-        internal
-        view
-        returns (bool)
-    {
+    function _isAccountCredential(address account, bytes32 credId) internal view returns (bool) {
         bytes32[] storage creds = _accountCredentials[account];
         for (uint256 i = 0; i < creds.length; i++) {
             if (creds[i] == credId) return true;
