@@ -97,12 +97,10 @@ contract DeepfakeGuard is IModule {
     // Hook: Challenge Gate
     // ─────────────────────────────────────────────
 
-    function preCheck(
-        address account,
-        address recipient,
-        uint256 value,
-        bytes calldata callData
-    ) external returns (bytes memory) {
+    function preCheck(address account, address recipient, uint256 value, bytes calldata callData)
+        external
+        returns (bytes memory)
+    {
         GuardConfig storage config = configs[account];
         if (!config.initialized) return "";
 

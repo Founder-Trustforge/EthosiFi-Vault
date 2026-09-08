@@ -399,10 +399,7 @@ contract EthosLiquidityManager is ReentrancyGuard {
         external
         onlyOwner
     {
-        if (
-            _positionManager == address(0) || _pool == address(0) || _ethosToken == address(0)
-                || _usdc == address(0)
-        ) revert ZeroAddress();
+        if (_positionManager == address(0) || _pool == address(0) || _ethosToken == address(0) || _usdc == address(0)) revert ZeroAddress();
         positionManager = INonfungiblePositionManager(_positionManager);
         ethosUsdcPool = _pool;
         ethosTokenAddr = _ethosToken;
