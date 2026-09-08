@@ -30,7 +30,6 @@ import {IModule} from "erc7579/interfaces/IModule.sol";
  * Layer: User Protection (Pillar 4)
  */
 contract AIThreatOracle is IModule {
-
     /**
      * @dev [CRIT-FIX 2026-09] addTrustedOracle() and updateGlobalScore() had zero
      *      access control — any address could register itself as a trusted oracle,
@@ -51,23 +50,28 @@ contract AIThreatOracle is IModule {
     uint8 public constant SCORE_GREEN = 30;
     uint8 public constant SCORE_YELLOW = 60;
     uint8 public constant SCORE_ORANGE = 85;
-    uint8 public constant SCORE_RED = 86;  // Block threshold
+    uint8 public constant SCORE_RED = 86; // Block threshold
 
-    enum RiskColor { GREEN, YELLOW, ORANGE, RED }
+    enum RiskColor {
+        GREEN,
+        YELLOW,
+        ORANGE,
+        RED
+    }
 
     struct OracleConfig {
         bool initialized;
-        uint8 blockThreshold;       // Default: 86 (RED)
+        uint8 blockThreshold; // Default: 86 (RED)
         uint8 guardianAlertThreshold; // Default: 61 (ORANGE)
-        bool requireScoreForAll;   // Require AI score for all transactions
-        address trustedOracle;      // EthosiFi oracle address
+        bool requireScoreForAll; // Require AI score for all transactions
+        address trustedOracle; // EthosiFi oracle address
     }
 
     struct ThreatScore {
-        uint8 score;              // 0–100
-        string reasoning;          // AI plain-English explanation
-        uint256 scoredAt;           // Timestamp
-        bytes32 txHash;             // Transaction being scored
+        uint8 score; // 0–100
+        string reasoning; // AI plain-English explanation
+        uint256 scoredAt; // Timestamp
+        bytes32 txHash; // Transaction being scored
         bool valid;
         RiskColor color;
     }
@@ -76,9 +80,9 @@ contract AIThreatOracle is IModule {
         uint256 avgTransactionAmount;
         uint256 totalTransactions;
         uint256 lastTransactionAt;
-        uint256 unusualTimeCount;    // Transactions at unusual hours
-        uint256 newAddressCount;     // Transactions to new addresses
-        uint256 highRiskCount;       // Previous high-risk transactions attempted
+        uint256 unusualTimeCount; // Transactions at unusual hours
+        uint256 newAddressCount; // Transactions to new addresses
+        uint256 highRiskCount; // Previous high-risk transactions attempted
     }
 
     mapping(address => OracleConfig) public configs;
@@ -96,7 +100,9 @@ contract AIThreatOracle is IModule {
     uint256 public totalBlocked;
     uint256 public totalAlerted;
 
-    event TransactionScored(address indexed account, bytes32 indexed txHash, uint8 score, RiskColor color, string reasoning);
+    event TransactionScored(
+        address indexed account, bytes32 indexed txHash, uint8 score, RiskColor color, string reasoning
+    );
     event TransactionBlockedByAI(address indexed account, bytes32 indexed txHash, uint8 score, string reasoning);
     event GuardianAlertTriggered(address indexed account, bytes32 indexed txHash, uint8 score);
     event BehaviorAnomalyDetected(address indexed account, string anomalyType);
@@ -137,12 +143,10 @@ contract AIThreatOracle is IModule {
     // Hook: Check AI Score Before Every Transaction
     // ─────────────────────────────────────────────
 
-    function preCheck(
-        address account,
-        address target,
-        uint256 value,
-        bytes calldata callData
-    ) external returns (bytes memory) {
+    function preCheck(address account, address target, uint256 value, bytes calldata callData)
+        external
+        returns (bytes memory)
+    {
         OracleConfig storage config = configs[account];
         if (!config.initialized) return "";
 
@@ -192,11 +196,16 @@ contract AIThreatOracle is IModule {
         if (finalScore >= config.blockThreshold) {
             totalBlocked++;
             emit TransactionBlockedByAI(account, txHash, finalScore, reasoning);
-            revert(string(abi.encodePacked(
-                "EthosiFi AI: Transaction blocked. Risk score: ",
-                _uintToString(finalScore),
-                "/100. Reason: ", reasoning
-            )));
+            revert(
+                string(
+                    abi.encodePacked(
+                        "EthosiFi AI: Transaction blocked. Risk score: ",
+                        _uintToString(finalScore),
+                        "/100. Reason: ",
+                        reasoning
+                    )
+                )
+            );
         }
 
         // Alert guardians if above alert threshold
@@ -237,12 +246,7 @@ contract AIThreatOracle is IModule {
         RiskColor color = _getColor(score);
 
         scores[account][txHash] = ThreatScore({
-            score: score,
-            reasoning: reasoning,
-            scoredAt: block.timestamp,
-            txHash: txHash,
-            valid: true,
-            color: color
+            score: score, reasoning: reasoning, scoredAt: block.timestamp, txHash: txHash, valid: true, color: color
         });
 
         emit OracleScoreSubmitted(msg.sender, txHash, score);
@@ -271,12 +275,11 @@ contract AIThreatOracle is IModule {
     // Behavioral Heuristics (Fallback Scoring)
     // ─────────────────────────────────────────────
 
-    function _heuristicScore(
-        address account,
-        address target,
-        uint256 value,
-        bytes calldata callData
-    ) internal view returns (uint8 score, string memory reasoning) {
+    function _heuristicScore(address account, address target, uint256 value, bytes calldata callData)
+        internal
+        view
+        returns (uint8 score, string memory reasoning)
+    {
         BehaviorProfile storage profile = profiles[account];
 
         score = 10; // Base score
@@ -329,8 +332,8 @@ contract AIThreatOracle is IModule {
         if (profile.totalTransactions == 0) {
             profile.avgTransactionAmount = value;
         } else {
-            profile.avgTransactionAmount = (profile.avgTransactionAmount * profile.totalTransactions + value)
-                / (profile.totalTransactions + 1);
+            profile.avgTransactionAmount =
+                (profile.avgTransactionAmount * profile.totalTransactions + value) / (profile.totalTransactions + 1);
         }
 
         profile.totalTransactions++;
@@ -359,7 +362,9 @@ contract AIThreatOracle is IModule {
 
     function _recoverSigner(bytes32 hash, bytes calldata sig) internal pure returns (address) {
         require(sig.length == 65, "Invalid sig length");
-        bytes32 r; bytes32 s; uint8 v;
+        bytes32 r;
+        bytes32 s;
+        uint8 v;
         assembly {
             r := calldataload(sig.offset)
             s := calldataload(add(sig.offset, 32))
@@ -370,10 +375,18 @@ contract AIThreatOracle is IModule {
 
     function _uintToString(uint256 value) internal pure returns (string memory) {
         if (value == 0) return "0";
-        uint256 temp = value; uint256 digits;
-        while (temp != 0) { digits++; temp /= 10; }
+        uint256 temp = value;
+        uint256 digits;
+        while (temp != 0) {
+            digits++;
+            temp /= 10;
+        }
         bytes memory buffer = new bytes(digits);
-        while (value != 0) { digits--; buffer[digits] = bytes1(uint8(48 + value % 10)); value /= 10; }
+        while (value != 0) {
+            digits--;
+            buffer[digits] = bytes1(uint8(48 + value % 10));
+            value /= 10;
+        }
         return string(buffer);
     }
 
@@ -398,16 +411,20 @@ contract AIThreatOracle is IModule {
     // View Helpers
     // ─────────────────────────────────────────────
 
-    function getScore(address account, bytes32 txHash) external view returns (
-        uint8 score, RiskColor color, string memory reasoning, bool valid
-    ) {
+    function getScore(address account, bytes32 txHash)
+        external
+        view
+        returns (uint8 score, RiskColor color, string memory reasoning, bool valid)
+    {
         ThreatScore storage s = scores[account][txHash];
         return (s.score, s.color, s.reasoning, s.valid);
     }
 
-    function getBehaviorProfile(address account) external view returns (
-        uint256 avgAmount, uint256 totalTx, uint256 lastTx, uint256 highRiskCount
-    ) {
+    function getBehaviorProfile(address account)
+        external
+        view
+        returns (uint256 avgAmount, uint256 totalTx, uint256 lastTx, uint256 highRiskCount)
+    {
         BehaviorProfile storage p = profiles[account];
         return (p.avgTransactionAmount, p.totalTransactions, p.lastTransactionAt, p.highRiskCount);
     }
@@ -419,7 +436,4 @@ contract AIThreatOracle is IModule {
     function isInitialized(address account) external view returns (bool) {
         return configs[account].initialized;
     }
-
-
-
 }

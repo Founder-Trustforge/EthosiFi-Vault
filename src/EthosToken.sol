@@ -21,8 +21,8 @@ pragma solidity ^0.8.23;
 contract EthosToken {
     // ─── ERC-20 metadata ──────────────────────────────────────────────────────
 
-    string public constant name     = "EthosiFi Token";
-    string public constant symbol   = "$ETHOS";
+    string public constant name = "EthosiFi Token";
+    string public constant symbol = "$ETHOS";
     uint8 public constant decimals = 18;
 
     // ─── Supply ───────────────────────────────────────────────────────────────
@@ -87,9 +87,10 @@ contract EthosToken {
         address _publicLaunch,
         address _teamVesting
     ) {
-        if (_treasury == address(0) || _ecosystem == address(0) ||
-            _earlyContributors == address(0) || _publicLaunch == address(0) ||
-            _teamVesting == address(0)) revert ZeroAddress();
+        if (
+            _treasury == address(0) || _ecosystem == address(0) || _earlyContributors == address(0)
+                || _publicLaunch == address(0) || _teamVesting == address(0)
+        ) revert ZeroAddress();
 
         owner = msg.sender;
         teamVestingContract = _teamVesting;
@@ -212,11 +213,7 @@ contract EthosToken {
      * @notice Set protocol contract addresses and auto-authorize them as burners.
      * @dev [MED-2] Emits revoke events for old addresses before replacing.
      */
-    function setContracts(
-        address _staking,
-        address _paymaster,
-        address _liquidityManager
-    ) external {
+    function setContracts(address _staking, address _paymaster, address _liquidityManager) external {
         if (msg.sender != owner) revert NotOwner();
 
         // Revoke old burners if being replaced
@@ -237,9 +234,18 @@ contract EthosToken {
         paymasterContract = _paymaster;
         liquidityManager = _liquidityManager;
 
-        if (_staking != address(0)) { authorizedBurners[_staking] = true; emit BurnerAuthorized(_staking); }
-        if (_paymaster != address(0)) { authorizedBurners[_paymaster] = true; emit BurnerAuthorized(_paymaster); }
-        if (_liquidityManager != address(0)) { authorizedBurners[_liquidityManager] = true; emit BurnerAuthorized(_liquidityManager); }
+        if (_staking != address(0)) {
+            authorizedBurners[_staking] = true;
+            emit BurnerAuthorized(_staking);
+        }
+        if (_paymaster != address(0)) {
+            authorizedBurners[_paymaster] = true;
+            emit BurnerAuthorized(_paymaster);
+        }
+        if (_liquidityManager != address(0)) {
+            authorizedBurners[_liquidityManager] = true;
+            emit BurnerAuthorized(_liquidityManager);
+        }
     }
 
     // ─── Two-step ownership ───────────────────────────────────────────────────
