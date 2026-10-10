@@ -20,6 +20,7 @@ contract EthosMVPBadge {
     string public constant symbol = "ETHOS-MVP";
 
     address public owner;
+    address public pendingOwner;
 
     uint256 private _tokenIdCounter;
 
@@ -59,6 +60,8 @@ contract EthosMVPBadge {
     event BadgeUpgraded(address indexed holder, uint256 indexed tokenId, uint8 fromTier, uint8 toTier);
     event MinterAuthorized(address indexed minter);
     event MinterRevoked(address indexed minter);
+    event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
     // ─── ERRORS ──────────────────────────────────────────────────────────────
 
@@ -243,9 +246,20 @@ contract EthosMVPBadge {
         emit MinterRevoked(minter);
     }
 
+    // [FIXED] Was single-step — a typo'd address would permanently orphan
+    // minter/revoker admin control over every badge. Now two-step, matching
+    // every other owned contract in this codebase.
     function transferOwnership(address newOwner) external {
         if (msg.sender != owner) revert NotOwner();
         if (newOwner == address(0)) revert ZeroAddress();
-        owner = newOwner;
+        pendingOwner = newOwner;
+        emit OwnershipTransferStarted(owner, newOwner);
+    }
+
+    function acceptOwnership() external {
+        require(msg.sender == pendingOwner, "Not pending owner");
+        emit OwnershipTransferred(owner, pendingOwner);
+        owner = pendingOwner;
+        pendingOwner = address(0);
     }
 }

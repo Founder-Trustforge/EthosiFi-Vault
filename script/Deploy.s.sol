@@ -15,6 +15,7 @@ import "../src/DeepfakeGuard.sol";
 import "../src/SeniorModeValidator.sol";
 import "../src/PaymasterManager.sol";
 import "../src/VaultFactory.sol";
+import {MSAAdvanced} from "erc7579/MSAAdvanced.sol";
 
 contract DeployScript is Script {
     address constant ENTRY_POINT_V07 = 0x0000000071727De22E5E9d8BAf0edAc6f37da032;
@@ -32,6 +33,7 @@ contract DeployScript is Script {
         address deepfakeGuard;
         address seniorModeValidator;
         address paymasterManager;
+        address accountImplementation;
         address vaultFactory;
     }
 
@@ -53,8 +55,8 @@ contract DeployScript is Script {
         Addresses memory addrs;
 
         console.log("\n[1/4] Core Security...");
-        addrs.timeLockValidator = address(new TimeLockValidator());
         addrs.biometricValidator = address(new BiometricValidator());
+        addrs.timeLockValidator = address(new TimeLockValidator(addrs.biometricValidator));
         addrs.guardianValidator = address(new GuardianValidator());
         addrs.emergencyFreeze = address(new EmergencyFreeze());
         addrs.multiSigUpgradeGuard = address(new MultiSigUpgradeGuard());
@@ -68,10 +70,21 @@ contract DeployScript is Script {
 
         console.log("\n[3/4] UX & Accessibility...");
         addrs.seniorModeValidator = address(new SeniorModeValidator());
-        addrs.paymasterManager = address(new PaymasterManager());
+        // [FIXED] PaymasterManager's constructor requires the EntryPoint
+        // address; the script previously called `new PaymasterManager()`
+        // with no arguments, which no longer compiles against the fixed
+        // constructor and would have left the paymaster wired to the
+        // wrong (zero) EntryPoint had it somehow been force-compiled.
+        addrs.paymasterManager = address(new PaymasterManager(entryPoint));
 
         console.log("\n[4/4] Infrastructure...");
-        VaultFactory factory = new VaultFactory(entryPoint);
+        // [FIXED] VaultFactory requires an `_accountImplementation` address
+        // that it uses as the EIP-1167 minimal-proxy target for every vault
+        // it clones via CREATE2. The script previously omitted this entirely.
+        // MSAAdvanced (erc7579-implementation's reference ERC-7579 account)
+        // is deployed here as that implementation/logic contract.
+        addrs.accountImplementation = address(new MSAAdvanced());
+        VaultFactory factory = new VaultFactory(entryPoint, addrs.accountImplementation);
         addrs.vaultFactory = address(factory);
 
         factory.setModules(
@@ -106,6 +119,7 @@ contract DeployScript is Script {
         console.log("  DEEPFAKE_GUARD=          ", addrs.deepfakeGuard);
         console.log("  SENIOR_MODE_VALIDATOR=   ", addrs.seniorModeValidator);
         console.log("  PAYMASTER_MANAGER=       ", addrs.paymasterManager);
+        console.log("  ACCOUNT_IMPLEMENTATION=  ", addrs.accountImplementation);
         console.log("  VAULT_FACTORY=           ", addrs.vaultFactory);
         console.log("====================================================");
     }

@@ -2,7 +2,7 @@
 pragma solidity ^0.8.23;
 import {PackedUserOperation} from "account-abstraction/interfaces/PackedUserOperation.sol";
 
-import {IModule} from "erc7579/interfaces/IModule.sol";
+import {IModule} from "erc7579/interfaces/IERC7579Module.sol";
 
 /**
  * @title MultiSigUpgradeGuard
@@ -38,6 +38,27 @@ contract MultiSigUpgradeGuard is IModule {
     }
 
     mapping(address => GuardConfig) public configs;
+
+    // [FIXED] preCheck previously reverted on EVERY installModule/uninstallModule
+    // call once this guard was initialized, with no path to ever let an
+    // approved, delay-elapsed upgrade through (the code comment even admitted
+    // "In production: verify proposalId from calldata" was never implemented).
+    // That's fail-safe against attackers but also permanently blocks every
+    // legitimate upgrade — the propose/approve/execute flow above was
+    // disconnected from the hook that's supposed to gate the real call.
+    // Fixed via a one-time execution grant: executeUpgrade() records exactly
+    // which (moduleType, module) it approved, and preCheck decodes the real
+    // installModule/uninstallModule calldata and only lets the call through
+    // if it matches an unexpired, unconsumed grant — then consumes it so it
+    // can't be reused for a second, different call.
+    struct ExecutionGrant {
+        bytes4 moduleType;
+        address module;
+        uint256 expiresAt;
+    }
+
+    uint256 public constant GRANT_VALIDITY = 1 hours;
+    mapping(address => ExecutionGrant) public pendingExecution;
 
     event UpgradeProposed(
         address indexed account, bytes32 indexed proposalId, address proposedModule, uint256 executeAfter
@@ -146,7 +167,13 @@ contract MultiSigUpgradeGuard is IModule {
         proposal.executed = true;
         emit UpgradeExecuted(account, proposalId, proposal.proposedModule);
 
-        // Actual module swap handled by the ERC-7579 account
+        // Grant a single, time-boxed window for the actual installModule/
+        // uninstallModule call (submitted separately by the account/relayer)
+        // to pass preCheck below. Actual module swap still happens via the
+        // account's own execute() path — this only authorizes preCheck to
+        // let that specific call through instead of always reverting it.
+        pendingExecution[account] =
+            ExecutionGrant({moduleType: proposal.moduleType, module: proposal.proposedModule, expiresAt: block.timestamp + GRANT_VALIDITY});
     }
 
     /**
@@ -186,10 +213,37 @@ contract MultiSigUpgradeGuard is IModule {
             if (isUpgradeCall) {
                 GuardConfig storage config = configs[account];
                 if (config.initialized) {
-                    // Must have an approved, delay-elapsed proposal
-                    // In production: verify proposalId from calldata
-                    emit UpgradeAttemptBlocked(account, msg.sender, target);
-                    revert("EthosiFi: Module upgrades require guardian consensus. Use proposeUpgrade().");
+                    // installModule/uninstallModule(uint256 moduleTypeId, address module, bytes initData)
+                    bool decodeOk = true;
+                    uint256 moduleTypeId;
+                    address module;
+                    if (callData.length >= 4 + 64) {
+                        (moduleTypeId, module) = abi.decode(callData[4:4 + 64], (uint256, address));
+                    } else {
+                        decodeOk = false;
+                    }
+
+                    ExecutionGrant memory grant = pendingExecution[account];
+                    // NOTE: proposeUpgrade()'s `moduleType` param is typed
+                    // bytes4 (an existing interface choice, not changed here)
+                    // while ERC-7579's installModule takes a uint256
+                    // moduleTypeId. Comparing via bytes4(uint32(moduleTypeId))
+                    // assumes callers of proposeUpgrade pass moduleType using
+                    // that same low-bits encoding (e.g. bytes4(uint32(1)) for
+                    // TYPE_VALIDATOR) — verify this matches how VaultFactory /
+                    // off-chain tooling actually calls proposeUpgrade before
+                    // relying on this in production.
+                    bool grantValid = decodeOk && grant.expiresAt > block.timestamp
+                        && grant.module == module && grant.moduleType == bytes4(uint32(moduleTypeId));
+
+                    if (!grantValid) {
+                        emit UpgradeAttemptBlocked(account, msg.sender, target);
+                        revert("EthosiFi: Module upgrades require guardian consensus. Use proposeUpgrade().");
+                    }
+
+                    // One-time use — consume the grant so it can't authorize
+                    // a second, different installModule/uninstallModule call.
+                    delete pendingExecution[account];
                 }
             }
         }

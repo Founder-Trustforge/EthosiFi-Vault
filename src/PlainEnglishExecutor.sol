@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BSL-1.1
 pragma solidity ^0.8.23;
 
-import {IModule} from "erc7579/interfaces/IModule.sol";
+import {IModule} from "erc7579/interfaces/IERC7579Module.sol";
 import {ReentrancyGuard} from "solady/utils/ReentrancyGuard.sol";
 
 /**
@@ -82,8 +82,11 @@ contract PlainEnglishExecutor is IModule, ReentrancyGuard {
     // ─── Errors ───────────────────────────────────────────────────────────────
 
     error NotOwner();
-    error AlreadyInitialized();
-    error NotInitialized();
+    // [FIXED] Renamed from AlreadyInitialized()/NotInitialized() — clashed
+    // with IModule's own AlreadyInitialized(address)/NotInitialized(address)
+    // errors (inherited via IModule, different arity, same name).
+    error ModuleAlreadyInitialized();
+    error ModuleNotInitialized();
     error SummaryNotFound();
     error SummaryAlreadyConfirmed();
     error SummaryExpired();
@@ -104,7 +107,7 @@ contract PlainEnglishExecutor is IModule, ReentrancyGuard {
     // ─── ERC-7579 lifecycle ───────────────────────────────────────────────────
 
     function onInstall(bytes calldata data) external override {
-        if (configs[msg.sender].initialized) revert AlreadyInitialized();
+        if (configs[msg.sender].initialized) revert ModuleAlreadyInitialized();
         (bool requireConfirmation, bool warnOnUnknown, bool blockOnUnknown) = abi.decode(data, (bool, bool, bool));
         configs[msg.sender] = ExecutorConfig({
             initialized: true,
@@ -185,7 +188,7 @@ contract PlainEnglishExecutor is IModule, ReentrancyGuard {
     // ─── User confirmation ────────────────────────────────────────────────────
 
     function confirmSummary(bytes32 calldataHash) external nonReentrant {
-        if (!configs[msg.sender].initialized) revert NotInitialized();
+        if (!configs[msg.sender].initialized) revert ModuleNotInitialized();
         TransactionSummary storage summary = summaries[msg.sender][calldataHash];
         if (bytes(summary.plainEnglish).length == 0) revert SummaryNotFound();
         if (summary.confirmed) revert SummaryAlreadyConfirmed();

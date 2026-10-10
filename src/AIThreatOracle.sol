@@ -2,7 +2,7 @@
 pragma solidity ^0.8.23;
 import {PackedUserOperation} from "account-abstraction/interfaces/PackedUserOperation.sol";
 
-import {IModule} from "erc7579/interfaces/IModule.sol";
+import {IModule} from "erc7579/interfaces/IERC7579Module.sol";
 
 /**
  * @title AIThreatOracle

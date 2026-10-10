@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BSL-1.1
 pragma solidity ^0.8.23;
 
-import {IValidator} from "erc7579/interfaces/IModule.sol";
+import {IValidator} from "erc7579/interfaces/IERC7579Module.sol";
 import {PackedUserOperation} from "account-abstraction/interfaces/PackedUserOperation.sol";
 import {ReentrancyGuard} from "solady/utils/ReentrancyGuard.sol";
 
@@ -121,11 +121,16 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
     // Errors
     // ─────────────────────────────────────────────────────────────
 
-    error AlreadyInitialized();
-    error NotInitialized();
+    // [FIXED] Renamed to avoid clashing with: (a) IModule's own
+    // AlreadyInitialized(address)/NotInitialized(address) errors (inherited
+    // via IValidator, different arity, same name — compile error), and (b)
+    // the CredentialRevoked EVENT declared above (an error and an event
+    // cannot share a name in the same contract — also a compile error).
+    error ModuleAlreadyInitialized();
+    error ModuleNotInitialized();
     error NoCredential();
     error CredentialNotFound();
-    error CredentialRevoked();
+    error CredentialInactive();
     error CredentialAlreadyExists();
     error InvalidAuthenticatorData();
     error UserPresenceNotSet();
@@ -148,7 +153,7 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
      *              rpIdHash: sha256("ethosifi.xyz") or the app's RP ID domain hash.
      */
     function onInstall(bytes calldata data) external override {
-        if (_initialized[msg.sender]) revert AlreadyInitialized();
+        if (_initialized[msg.sender]) revert ModuleAlreadyInitialized();
 
         (bytes32 credentialId, uint256[2] memory pubKey, bytes32 rpIdHash) =
             abi.decode(data, (bytes32, uint256[2], bytes32));
@@ -192,17 +197,17 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
      * userOp.signature must be ABI-encoded WebAuthnSignature struct.
      * The challenge embedded in clientDataJSON must equal base64url(userOpHash).
      */
-    function validateUserOp(
-        PackedUserOperation calldata userOp,
-        bytes32 userOpHash,
-        uint256 /* missingAccountFunds */
-    )
+    // [FIXED] IValidator.validateUserOp takes exactly (userOp, userOpHash) —
+    // the extra trailing missingAccountFunds param here didn't match the
+    // interface, so this never actually implemented IValidator and the
+    // contract failed to compile ("should be marked as abstract").
+    function validateUserOp(PackedUserOperation calldata userOp, bytes32 userOpHash)
         external
         override
         nonReentrant
         returns (uint256)
     {
-        if (!_initialized[msg.sender]) revert NotInitialized();
+        if (!_initialized[msg.sender]) revert ModuleNotInitialized();
 
         WebAuthnSignature memory sig = abi.decode(userOp.signature, (WebAuthnSignature));
 
@@ -211,8 +216,16 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
 
         if (credId == bytes32(0)) revert NoCredential();
 
+        // [CRIT FIXED] Credential ownership was never checked: credentials live
+        // in a global credentialId mapping and the id comes from the (attacker
+        // supplied) signature, so anyone could enroll their OWN passkey on
+        // their own vault and then validate userOps for ANY other vault with
+        // it (rpIdHash is the same site-wide). The credential must belong to
+        // msg.sender.
+        if (!_isAccountCredential(msg.sender, credId)) revert CredentialNotFound();
+
         Credential storage cred = _credentials[credId];
-        if (!cred.active) revert CredentialRevoked();
+        if (!cred.active) revert CredentialInactive();
 
         bool valid = _verifyWebAuthn(sig, cred.publicKey, userOpHash, _rpIdHashes[msg.sender]);
         return valid ? SIG_VALIDATION_SUCCESS : SIG_VALIDATION_FAILED;
@@ -240,12 +253,46 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
         bytes32 credId = sig.credentialId != bytes32(0) ? sig.credentialId : _primaryCredential[msg.sender];
 
         if (credId == bytes32(0)) return 0xffffffff;
+        if (!_isAccountCredential(msg.sender, credId)) return 0xffffffff; // see validateUserOp
 
         Credential storage cred = _credentials[credId];
         if (!cred.active) return 0xffffffff;
 
-        bool valid = _verifyWebAuthn(sig, cred.publicKey, hash, _rpIdHashes[msg.sender]);
+        // [FIXED] isValidSignatureWithSender must stay `view` per ERC-1271 /
+        // IValidator, but the original _verifyWebAuthn also WROTE the
+        // replay-protection flag — a state mutation inside a view function,
+        // which doesn't compile. This path now only checks (never consumes)
+        // replay status; only validateUserOp's real execution path below
+        // marks an assertion as used.
+        bool valid = _verifyWebAuthnView(sig, cred.publicKey, hash, _rpIdHashes[msg.sender]);
         return valid ? bytes4(0x1626ba7e) : bytes4(0xffffffff);
+    }
+
+    /**
+     * @notice Verify a fingerprint (WebAuthn) assertion by one of `account`'s
+     * enrolled passkeys over an arbitrary `challenge`, without any ERC-4337
+     * context. Used by TimeLockValidator to release delayed transfers.
+     * Read-only: replay is prevented by the caller (each pending tx can only
+     * be released once; the challenge is bound to chain/contract/account/tx).
+     * @param signature abi.encode(WebAuthnSignature)
+     */
+    function verifyConfirmation(address account, bytes32 challenge, bytes calldata signature)
+        external
+        view
+        returns (bool)
+    {
+        if (!_initialized[account]) return false;
+
+        WebAuthnSignature memory sig = abi.decode(signature, (WebAuthnSignature));
+        bytes32 credId = sig.credentialId != bytes32(0) ? sig.credentialId : _primaryCredential[account];
+        if (credId == bytes32(0)) return false;
+
+        // The credential must belong to THIS account and be active.
+        if (!_isAccountCredential(account, credId)) return false;
+        Credential storage cred = _credentials[credId];
+        if (!cred.active) return false;
+
+        return _verifyWebAuthnView(sig, cred.publicKey, challenge, _rpIdHashes[account]);
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -257,7 +304,7 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
      * Only callable by the account itself.
      */
     function addCredential(bytes32 credentialId, uint256[2] calldata pubKey) external {
-        if (!_initialized[msg.sender]) revert NotInitialized();
+        if (!_initialized[msg.sender]) revert ModuleNotInitialized();
         if (credentialId == bytes32(0)) revert NoCredential();
         if (pubKey[0] == 0 || pubKey[1] == 0) revert InvalidPublicKey();
         if (_credentials[credentialId].active) revert CredentialAlreadyExists();
@@ -273,7 +320,7 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
      * Cannot revoke the primary unless another active credential exists.
      */
     function revokeCredential(bytes32 credentialId) external {
-        if (!_initialized[msg.sender]) revert NotInitialized();
+        if (!_initialized[msg.sender]) revert ModuleNotInitialized();
         if (!_isAccountCredential(msg.sender, credentialId)) revert CredentialNotFound();
 
         // Prevent locking out the account — must have at least 1 active credential after revocation
@@ -301,9 +348,9 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
      * @notice Set which credential is the primary (default) for this account.
      */
     function setPrimaryCredential(bytes32 credentialId) external {
-        if (!_initialized[msg.sender]) revert NotInitialized();
+        if (!_initialized[msg.sender]) revert ModuleNotInitialized();
         if (!_isAccountCredential(msg.sender, credentialId)) revert CredentialNotFound();
-        if (!_credentials[credentialId].active) revert CredentialRevoked();
+        if (!_credentials[credentialId].active) revert CredentialInactive();
 
         _primaryCredential[msg.sender] = credentialId;
         emit PrimaryCredentialChanged(msg.sender, credentialId);
@@ -369,6 +416,27 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
         bytes32 challenge,
         bytes32 rpIdHash
     ) internal returns (bool) {
+        bool valid = _verifyWebAuthnView(sig, pubKey, challenge, rpIdHash);
+        if (valid) {
+            // Consume the assertion so it can't be replayed by a second
+            // validateUserOp call. Only the real execution path marks this —
+            // the view-only ERC-1271 check above never does.
+            bytes32 assertionHash = keccak256(abi.encodePacked(sig.authenticatorData, sig.clientDataJSON));
+            _usedAssertions[assertionHash] = true;
+        }
+        return valid;
+    }
+
+    /// @dev Same checks as _verifyWebAuthn, but strictly read-only: verifies
+    /// an assertion hasn't already been used without marking it used itself.
+    /// Used by isValidSignatureWithSender, which the interface requires to
+    /// stay `view`.
+    function _verifyWebAuthnView(
+        WebAuthnSignature memory sig,
+        uint256[2] storage pubKey,
+        bytes32 challenge,
+        bytes32 rpIdHash
+    ) internal view returns (bool) {
         // ── Step 1: authenticatorData minimum length ──────────────
         if (sig.authenticatorData.length < 37) revert InvalidAuthenticatorData();
 
@@ -399,10 +467,9 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
         bytes32 clientDataHash = sha256(sig.clientDataJSON);
         bytes32 signedMessage = sha256(abi.encodePacked(sig.authenticatorData, clientDataHash));
 
-        // ── Step 7: Replay protection ─────────────────────────────
+        // ── Step 7: Replay protection (check only, don't consume) ─
         bytes32 assertionHash = keccak256(abi.encodePacked(sig.authenticatorData, sig.clientDataJSON));
         if (_usedAssertions[assertionHash]) revert ReplayDetected();
-        _usedAssertions[assertionHash] = true;
 
         // ── Step 8: P256 signature verification ───────────────────
         return _verifyP256(signedMessage, sig.rs, pubKey);

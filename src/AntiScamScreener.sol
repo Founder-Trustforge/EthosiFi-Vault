@@ -2,7 +2,7 @@
 pragma solidity ^0.8.23;
 import {PackedUserOperation} from "account-abstraction/interfaces/PackedUserOperation.sol";
 
-import {IModule} from "erc7579/interfaces/IModule.sol";
+import {IModule} from "erc7579/interfaces/IERC7579Module.sol";
 
 /**
  * @title AntiScamScreener
@@ -26,6 +26,40 @@ import {IModule} from "erc7579/interfaces/IModule.sol";
  */
 contract AntiScamScreener is IModule {
     uint256 constant MODULE_TYPE_HOOK = 4;
+
+    // [CRIT FIXED] registerThreat/batchRegisterThreats/removeThreat below were
+    // marked `onlyOwner`, but this contract never declared an owner or that
+    // modifier — a straight compile error, meaning this fix note was written
+    // but never actually applied. Adding real two-step ownership here,
+    // matching the pattern already used elsewhere in this codebase (e.g.
+    // AIThreatOracle, PoisonedAddressProtection).
+    address public owner;
+    address public pendingOwner;
+
+    event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "AntiScamScreener: not owner");
+        _;
+    }
+
+    constructor() {
+        owner = msg.sender;
+    }
+
+    function transferOwnership(address newOwner) external onlyOwner {
+        require(newOwner != address(0), "Zero address");
+        pendingOwner = newOwner;
+        emit OwnershipTransferStarted(owner, newOwner);
+    }
+
+    function acceptOwnership() external {
+        require(msg.sender == pendingOwner, "Not pending owner");
+        emit OwnershipTransferred(owner, pendingOwner);
+        owner = pendingOwner;
+        pendingOwner = address(0);
+    }
 
     enum ThreatLevel {
         SAFE, // 0 - No known threats

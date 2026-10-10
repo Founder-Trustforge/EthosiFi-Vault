@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BSL-1.1
 pragma solidity ^0.8.23;
 
-import {IModule} from "erc7579/interfaces/IModule.sol";
+import {IModule} from "erc7579/interfaces/IERC7579Module.sol";
 import {ReentrancyGuard} from "solady/utils/ReentrancyGuard.sol";
 
 /**
@@ -81,8 +81,11 @@ contract PaymasterManager is IModule, ReentrancyGuard {
 
     error NotOwner();
     error NotEntryPoint();
-    error AlreadyInitialized();
-    error NotInitialized();
+    // [FIXED] Renamed from AlreadyInitialized()/NotInitialized() — clashed
+    // with IModule's own AlreadyInitialized(address)/NotInitialized(address)
+    // errors (inherited via IModule, different arity, same name).
+    error ModuleAlreadyInitialized();
+    error ModuleNotInitialized();
     error ZeroAmount();
     error TokenNotSupported();
     error InsufficientFeeBalance();
@@ -110,7 +113,7 @@ contract PaymasterManager is IModule, ReentrancyGuard {
     }
 
     function onInstall(bytes calldata data) external override nonReentrant {
-        if (configs[msg.sender].initialized) revert AlreadyInitialized();
+        if (configs[msg.sender].initialized) revert ModuleAlreadyInitialized();
         (uint8 tier, address feeToken) = abi.decode(data, (uint8, address));
         if (tier > uint8(UserTier.ENTERPRISE)) revert InvalidTier();
         if (feeToken != address(0) && !feeTokens[feeToken].supported) revert TokenNotSupported();
@@ -179,7 +182,7 @@ contract PaymasterManager is IModule, ReentrancyGuard {
         if (!feeTokens[feeToken].supported) revert TokenNotSupported();
         if (amount == 0) revert ZeroAmount();
         PaymasterConfig storage config = configs[msg.sender];
-        if (!config.initialized) revert NotInitialized();
+        if (!config.initialized) revert ModuleNotInitialized();
         if (config.feeToken != address(0) && config.feeToken != feeToken) revert TokenMismatch();
         _safeTransferFrom(feeToken, msg.sender, address(this), amount);
         config.feeBalance += amount;
@@ -189,7 +192,7 @@ contract PaymasterManager is IModule, ReentrancyGuard {
 
     function withdrawFeeToken(uint256 amount) external nonReentrant {
         PaymasterConfig storage config = configs[msg.sender];
-        if (!config.initialized) revert NotInitialized();
+        if (!config.initialized) revert ModuleNotInitialized();
         if (amount == 0) revert ZeroAmount();
         if (config.feeBalance < amount) revert InsufficientFeeBalance();
         address token = config.feeToken;

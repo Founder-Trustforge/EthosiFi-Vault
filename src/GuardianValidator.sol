@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: BSL-1.1
 pragma solidity ^0.8.23;
 
-import {IValidator} from "erc7579/interfaces/IModule.sol";
+import {IValidator} from "erc7579/interfaces/IERC7579Module.sol";
 import {PackedUserOperation} from "account-abstraction/interfaces/PackedUserOperation.sol";
 import {ReentrancyGuard} from "solady/utils/ReentrancyGuard.sol";
 import {IERC7579Account} from "erc7579/interfaces/IERC7579Account.sol";
+import {ModeLib} from "erc7579/lib/ModeLib.sol";
 
 /**
  * @title GuardianValidator
@@ -113,8 +114,11 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
     // Errors
     // ─────────────────────────────────────────────────────────────
 
-    error AlreadyInitialized();
-    error NotInitialized();
+    // [FIXED] Renamed — these clashed with IModule's own
+    // AlreadyInitialized(address)/NotInitialized(address) errors (inherited
+    // via IValidator, different arity, same name — compile error).
+    error ModuleAlreadyInitialized();
+    error ModuleNotInitialized();
     error NotGuardian();
     error NotGuardianOrOwner();
     error RecoveryPending();
@@ -145,7 +149,7 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
      * threshold: minimum total weight required for recovery approval.
      */
     function onInstall(bytes calldata data) external override {
-        if (_configs[msg.sender].initialized) revert AlreadyInitialized();
+        if (_configs[msg.sender].initialized) revert ModuleAlreadyInitialized();
 
         (Guardian[] memory initialGuardians, uint256 _threshold) = abi.decode(data, (Guardian[], uint256));
 
@@ -203,7 +207,10 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
      * It is a recovery-only module. Always returns FAILED.
      * The TimeLockValidator handles normal UserOp validation.
      */
-    function validateUserOp(PackedUserOperation calldata, bytes32, uint256) external pure override returns (uint256) {
+    // [FIXED] IValidator.validateUserOp takes exactly (userOp, userOpHash) —
+    // the extra trailing uint256 here didn't match the interface, so this
+    // never actually implemented IValidator ("should be marked as abstract").
+    function validateUserOp(PackedUserOperation calldata, bytes32) external pure override returns (uint256) {
         return 1; // SIG_VALIDATION_FAILED — intentional
     }
 
@@ -235,7 +242,7 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
         bytes calldata newValidatorData
     ) external {
         AccountConfig storage cfg = _configs[account];
-        if (!cfg.initialized) revert NotInitialized();
+        if (!cfg.initialized) revert ModuleNotInitialized();
 
         // Only a guardian or the account itself may initiate
         bool callerIsGuardian = _guardians[account][msg.sender].addr != address(0);
@@ -273,7 +280,7 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
      */
     function approveRecovery(address account) external nonReentrant {
         AccountConfig storage cfg = _configs[account];
-        if (!cfg.initialized) revert NotInitialized();
+        if (!cfg.initialized) revert ModuleNotInitialized();
 
         Guardian storage g = _guardians[account][msg.sender];
         if (g.addr == address(0)) revert NotGuardian();
@@ -312,7 +319,7 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
      */
     function executeRecovery(address account) external nonReentrant {
         AccountConfig storage cfg = _configs[account];
-        if (!cfg.initialized) revert NotInitialized();
+        if (!cfg.initialized) revert ModuleNotInitialized();
 
         RecoveryRequest storage req = _recoveries[account];
         if (req.initiatedAt == 0) revert NoRecoveryActive();
@@ -331,7 +338,7 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
      */
     function cancelRecovery(address account) external {
         AccountConfig storage cfg = _configs[account];
-        if (!cfg.initialized) revert NotInitialized();
+        if (!cfg.initialized) revert ModuleNotInitialized();
 
         bool callerIsGuardian = _guardians[account][msg.sender].addr != address(0);
         bool callerIsAccount = msg.sender == account;
@@ -355,7 +362,7 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
      */
     function addGuardian(address guardianAddr, uint256 weight, bytes32 identityHash) external {
         AccountConfig storage cfg = _configs[msg.sender];
-        if (!cfg.initialized) revert NotInitialized();
+        if (!cfg.initialized) revert ModuleNotInitialized();
         if (guardianAddr == address(0)) revert ZeroAddress();
         if (weight == 0) revert InvalidWeight();
         if (cfg.guardianCount >= MAX_GUARDIANS) revert TooManyGuardians();
@@ -375,7 +382,7 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
      */
     function removeGuardian(address guardianAddr) external {
         AccountConfig storage cfg = _configs[msg.sender];
-        if (!cfg.initialized) revert NotInitialized();
+        if (!cfg.initialized) revert ModuleNotInitialized();
         if (_guardians[msg.sender][guardianAddr].addr == address(0)) revert GuardianNotFound();
 
         // Check threshold still reachable after removal
@@ -404,7 +411,7 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
      */
     function setThreshold(uint256 newThreshold) external {
         AccountConfig storage cfg = _configs[msg.sender];
-        if (!cfg.initialized) revert NotInitialized();
+        if (!cfg.initialized) revert ModuleNotInitialized();
         if (newThreshold == 0) revert InvalidThreshold();
 
         uint256 totalWeight = _totalGuardianWeight(msg.sender);
@@ -546,7 +553,7 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
 
             IERC7579Account(account)
                 .executeFromExecutor(
-                    0x01, // ModeCode: batch call
+                    ModeLib.encodeSimpleBatch(), // [FIXED] was a raw int literal, not a ModeCode
                     batchData
                 );
         } else {
@@ -557,7 +564,7 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
 
             IERC7579Account(account)
                 .executeFromExecutor(
-                    0x00, // ModeCode: single call
+                    ModeLib.encodeSimpleSingle(), // [FIXED] was a raw int literal, not a ModeCode
                     abi.encode(account, uint256(0), rotateCall)
                 );
         }

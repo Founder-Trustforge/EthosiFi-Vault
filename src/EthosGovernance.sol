@@ -225,7 +225,10 @@ contract EthosGovernance is ReentrancyGuard {
         if (p.target != address(0) && p.callData.length >= 4) {
             // Re-validate at execution time
             if (!approvedTargets[p.target]) revert TargetNotApproved();
-            bytes4 selector = bytes4(p.callData[:4]);
+            // [FIXED] `p.callData` is bytes storage — range slicing ([:4])
+            // only works on bytes calldata, so this didn't compile. Extract
+            // the selector byte-by-byte instead.
+            bytes4 selector = _selectorOf(p.callData);
             if (!approvedSelectors[p.target][selector]) revert SelectorNotApproved();
 
             (bool success,) = p.target.call(p.callData);
@@ -310,5 +313,13 @@ contract EthosGovernance is ReentrancyGuard {
             ids[i] = temp[i];
         }
         total = proposalCount;
+    }
+
+    /// @dev Extracts the leading 4-byte selector from a bytes storage array
+    /// (range slicing like `data[:4]` only works on bytes calldata).
+    function _selectorOf(bytes storage data) internal view returns (bytes4 result) {
+        for (uint256 i = 0; i < 4; i++) {
+            result |= bytes4(data[i]) >> (i * 8);
+        }
     }
 }

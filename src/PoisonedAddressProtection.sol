@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BSL-1.1
 pragma solidity ^0.8.23;
 
-import {IValidator} from "erc7579/interfaces/IModule.sol";
+import {IValidator} from "erc7579/interfaces/IERC7579Module.sol";
 import {PackedUserOperation} from "account-abstraction/interfaces/PackedUserOperation.sol";
 
 /**
@@ -26,6 +26,39 @@ contract PoisonedAddressProtection is IValidator {
     uint256 constant MODULE_TYPE_VALIDATOR = 1;
     uint256 constant SIG_VALIDATION_SUCCESS = 0;
     uint256 constant SIG_VALIDATION_FAILED = 1;
+
+    // [CRIT FIXED] flagPoisonedFingerprint/unflagFingerprint below were marked
+    // `onlyOwner`, but this contract never declared an owner or that modifier
+    // — a straight compile error, meaning this fix note was written but never
+    // actually applied. Adding real two-step ownership here, matching the
+    // pattern already used elsewhere in this codebase (e.g. AIThreatOracle).
+    address public owner;
+    address public pendingOwner;
+
+    event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "PoisonedAddressProtection: not owner");
+        _;
+    }
+
+    constructor() {
+        owner = msg.sender;
+    }
+
+    function transferOwnership(address newOwner) external onlyOwner {
+        require(newOwner != address(0), "Zero address");
+        pendingOwner = newOwner;
+        emit OwnershipTransferStarted(owner, newOwner);
+    }
+
+    function acceptOwnership() external {
+        require(msg.sender == pendingOwner, "Not pending owner");
+        emit OwnershipTransferred(owner, pendingOwner);
+        owner = pendingOwner;
+        pendingOwner = address(0);
+    }
 
     uint256 public constant DEFAULT_THRESHOLD = 50 * 1e6; // $50 USDC — require verification above this
     uint256 public constant CONFIRMATION_WINDOW = 15 minutes; // Pre-confirmed address valid for 15 min
@@ -91,8 +124,12 @@ contract PoisonedAddressProtection is IValidator {
     // Core Validation
     // ─────────────────────────────────────────────
 
-    function validateUserOp(PackedUserOperation calldata userOp, bytes32 userOpHash, uint256)
+    // [FIXED] IValidator.validateUserOp takes exactly (userOp, userOpHash) —
+    // the extra trailing uint256 here didn't match the interface, so this
+    // never actually implemented IValidator ("should be marked as abstract").
+    function validateUserOp(PackedUserOperation calldata userOp, bytes32 userOpHash)
         external
+        override
         returns (uint256)
     {
         ProtectionConfig storage config = configs[msg.sender];

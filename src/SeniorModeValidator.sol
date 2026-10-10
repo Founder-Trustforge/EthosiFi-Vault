@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BSL-1.1
 pragma solidity ^0.8.23;
 
-import {IValidator} from "erc7579/interfaces/IModule.sol";
+import {IValidator} from "erc7579/interfaces/IERC7579Module.sol";
 import {PackedUserOperation} from "account-abstraction/interfaces/PackedUserOperation.sol";
 
 /**
@@ -121,8 +121,12 @@ contract SeniorModeValidator is IValidator {
     // Core Validation
     // ─────────────────────────────────────────────
 
-    function validateUserOp(PackedUserOperation calldata userOp, bytes32 userOpHash, uint256)
+    // [FIXED] IValidator.validateUserOp takes exactly (userOp, userOpHash) —
+    // the extra trailing uint256 here didn't match the interface, so this
+    // never actually implemented IValidator ("should be marked as abstract").
+    function validateUserOp(PackedUserOperation calldata userOp, bytes32 userOpHash)
         external
+        override
         returns (uint256)
     {
         SeniorConfig storage config = configs[msg.sender];

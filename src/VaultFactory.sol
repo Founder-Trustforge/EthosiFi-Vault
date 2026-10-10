@@ -189,6 +189,18 @@ contract VaultFactory is ReentrancyGuard {
             )
         ) failed |= 1 << 1;
 
+        // TimeLockValidator also needs the executor role so confirmAndRelease()
+        // can call executeFromExecutor on the vault (onInstall is idempotent).
+        if (
+            !_installModule(
+                vault,
+                timeLockValidator,
+                TYPE_EXECUTOR,
+                "TimeLockValidator",
+                abi.encode(guardians, threshold, uint256(0), emptyUSDC, "")
+            )
+        ) failed |= 1 << 12;
+
         if (
             !_installModule(
                 vault, guardianValidator, TYPE_VALIDATOR, "GuardianValidator", _encodeGuardians(guardians, weights, threshold)
