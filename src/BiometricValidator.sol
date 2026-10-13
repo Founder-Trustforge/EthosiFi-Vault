@@ -103,7 +103,7 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
     /// @dev account → primary credentialId (used when sig doesn't specify one)
     mapping(address => bytes32) private _primaryCredential;
 
-    /// @dev account → rpIdHash (sha256 of the relying party domain, e.g. "ethosifi.xyz")
+    /// @dev account → rpIdHash (sha256 of the relying party domain, e.g. "ethosifi.com")
     mapping(address => bytes32) private _rpIdHashes;
 
     /// @dev replay protection: sha256(authenticatorData ‖ clientDataJSON) → used
@@ -150,7 +150,7 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
      * @notice Install the module on a smart account.
      * @param data ABI-encoded (bytes32 credentialId, uint256[2] pubKey,
      * bytes32 rpIdHash)
-     *              rpIdHash: sha256("ethosifi.xyz") or the app's RP ID domain hash.
+     *              rpIdHash: sha256("ethosifi.com") or the app's RP ID domain hash.
      */
     function onInstall(bytes calldata data) external override {
         if (_initialized[msg.sender]) revert ModuleAlreadyInitialized();

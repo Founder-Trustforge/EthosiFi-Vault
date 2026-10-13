@@ -18,14 +18,22 @@ export async function loadRequest(provider, timelockAddr, acct, txHash) {
   return { token, amount, recipient, expiresAt: Number(expiresAt) }; // render in plain English; show full recipient address
 }
 
-export async function confirmWithFingerprint({ signer, timelockAddr, acct, txHash, credentialIdBytes32, credentialIdRaw }) {
+const RP_ID = "ethosifi.com"; // the Vault domain (the hub is ethosifi.xyz - do not use it here)
+
+export async function confirmWithFingerprint({ signer, timelockAddr, biometricAddr, acct, txHash, credentialIdBytes32, credentialIdRaw }) {
   const tl = new ethers.Contract(timelockAddr, TL_ABI, signer);
   const challenge = await tl.confirmationChallenge(acct, txHash); // bytes32 hex
+
+  // Refuse to prompt if the on-chain enrolled RP ID differs from this page's - it could never verify.
+  const bio = new ethers.Contract(biometricAddr, ["function getRpIdHash(address) view returns (bytes32)"], signer);
+  const enrolled = await bio.getRpIdHash(acct);
+  const expected = ethers.sha256(ethers.toUtf8Bytes(RP_ID));
+  if (enrolled !== expected) throw new Error("This vault's passkey was enrolled for a different domain");
 
   const cred = await navigator.credentials.get({
     publicKey: {
       challenge: ethers.getBytes(challenge),
-      rpId: "ethosifi.xyz",                       // MUST match the rpIdHash enrolled at signup
+      rpId: RP_ID,                                // MUST match the rpIdHash enrolled at signup
       allowCredentials: [{ type: "public-key", id: credentialIdRaw }],
       userVerification: "required",               // forces the fingerprint / biometric, not just a tap
     },
