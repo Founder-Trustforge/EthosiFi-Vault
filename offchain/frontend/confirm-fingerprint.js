@@ -41,7 +41,9 @@ export async function confirmWithFingerprint({ signer, timelockAddr, biometricAd
   const r = cred.response;
   const clientDataJSON = new Uint8Array(r.clientDataJSON);
   const text = new TextDecoder().decode(clientDataJSON);
-  const challengeOffset = text.indexOf('"challenge":"') + '"challenge":"'.length;
+  const key = '"challenge":"';
+  if (text.indexOf(key) < 0) throw new Error("Unexpected clientDataJSON");
+  const challengeOffset = text.indexOf(key) + key.length;
   const { r: rr, s } = derToRS(new Uint8Array(r.signature));
 
   const encoded = ethers.AbiCoder.defaultAbiCoder().encode([SIG_TYPE], [[
@@ -51,7 +53,8 @@ export async function confirmWithFingerprint({ signer, timelockAddr, biometricAd
   return tx.wait();
 }
 
-// WebAuthn returns an ASN.1 DER ECDSA signature; the contract wants (r, s) with low-s.
+// WebAuthn returns an ASN.1 DER ECDSA signature; the contract wants raw (r, s). Low-s is normalised
+// defensively (the contract does not require it).
 function derToRS(der) {
   let o = 2; if (der[1] & 0x80) o += der[1] & 0x7f;
   const rl = der[o + 1]; const r = der.slice(o + 2, o + 2 + rl);

@@ -287,7 +287,7 @@ contract TimeLockValidator is IValidator {
 
         IERC7579Account(account).executeFromExecutor(
             ModeLib.encodeSimpleSingle(),
-            abi.encode(target, value, innerCallData)
+            abi.encodePacked(target, value, innerCallData) // ERC-7579 single exec is PACKED: target(20)||value(32)||data
         );
     }
 
@@ -474,7 +474,9 @@ contract TimeLockValidator is IValidator {
             }
         }
 
-        if (innerData.length >= 4 + 64) {
+        // value must be 0 for the ERC-20 shape; ETH attached to a transfer-looking call
+        // would otherwise be ignored by the budget (fail closed instead).
+        if (value == 0 && innerData.length >= 4 + 64) {
             bytes4 innerSelector = _toBytes4(innerData, 0);
             if (innerSelector == IERC20Transfer.transfer.selector) {
                 address to = _toAddress(innerData, 16); // 4-byte selector + 12-byte address padding

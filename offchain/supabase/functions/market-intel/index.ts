@@ -19,15 +19,17 @@ Deno.serve(async (req) => {
 
   const summary = await summarize(prices, scams).catch((e) => { console.error("summary", e); return ""; });
 
-  // Keep last good prices/scams if a source failed this run.
+  // Keep last good prices/scams if a source failed this run; only bump updated_at on fresh data.
   const { data: prev } = await sb.from("market_intel").select("*").eq("id", 1).maybeSingle();
-  await sb.from("market_intel").upsert({
+  const fresh = prices.length > 0;
+  const { error } = await sb.from("market_intel").upsert({
     id: 1,
-    updated_at: new Date().toISOString(),
-    prices: prices.length ? prices : prev?.prices ?? [],
+    updated_at: fresh ? new Date().toISOString() : prev?.updated_at ?? new Date().toISOString(),
+    prices: fresh ? prices : prev?.prices ?? [],
     scams: scams.length ? scams : prev?.scams ?? [],
     summary: summary || prev?.summary || "",
   });
+  if (error) return Response.json({ ok: false, error: error.message }, { status: 500 });
   return Response.json({ ok: true, prices: prices.length, scams: scams.length });
 });
 
@@ -37,7 +39,7 @@ async function fetchPrices() {
     const key = Deno.env.get("COINGECKO_API_KEY");
     if (key) headers["x-cg-demo-api-key"] = key;
     const url = `https://api.coingecko.com/api/v3/simple/price?ids=${COINS.join(",")}&vs_currencies=usd&include_24hr_change=true`;
-    const r = await fetch(url, { headers });
+    const r = await fetch(url, { headers, signal: AbortSignal.timeout(10_000) });
     if (!r.ok) throw new Error(`coingecko ${r.status}`);
     const j = await r.json();
     return COINS.filter((c) => j[c]).map((c) => ({
@@ -48,7 +50,7 @@ async function fetchPrices() {
 
 async function fetchHacks() {
   try {
-    const r = await fetch("https://api.llama.fi/hacks");
+    const r = await fetch("https://api.llama.fi/hacks", { signal: AbortSignal.timeout(15_000) });
     if (!r.ok) throw new Error(`llama ${r.status}`);
     const all = await r.json();
     return all
@@ -58,8 +60,8 @@ async function fetchHacks() {
         name: String(h.name).slice(0, 80),
         date: new Date(h.date * 1000).toISOString().slice(0, 10),
         usd_lost: h.amount,
-        chains: h.chain,
-        technique: h.technique ?? h.classification ?? null,
+        chains: Array.isArray(h.chain) ? h.chain.slice(0, 5).map((c: unknown) => String(c).slice(0, 20)) : null,
+        technique: String(h.technique ?? h.classification ?? "").slice(0, 60) || null,
         returned: h.returnedFunds ?? null,
       }));
   } catch (e) { console.error(e); return []; }

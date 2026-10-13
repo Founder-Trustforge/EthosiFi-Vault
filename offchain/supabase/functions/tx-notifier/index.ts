@@ -18,34 +18,51 @@ const ABI = [
   "event BiometricConfirmationRequested(address indexed account, bytes32 indexed txHash, address token, uint256 amount, address recipient, uint256 expiresAt)",
 ];
 const MAX_RANGE = 2000;   // blocks per run
-const CONFIRMATIONS = 2;  // avoid reorg noise
+const CONFIRMATIONS = 6;  // avoid reorg noise
+const OVERLAP = 12;       // blocks re-scanned every run
 
 Deno.serve(async (req) => {
-  if (req.headers.get("x-cron-secret") !== Deno.env.get("CRON_SECRET")) {
+  const secret = Deno.env.get("CRON_SECRET");
+  if (!secret || req.headers.get("x-cron-secret") !== secret) {
     return new Response("forbidden", { status: 403 });
   }
+  for (const k of ["RPC_URL", "TIMELOCK_ADDRESS", "CONFIRM_BASE_URL", "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM"]) {
+    if (!Deno.env.get(k)) return new Response(`missing env ${k}`, { status: 500 });
+  }
+  const base = Deno.env.get("CONFIRM_BASE_URL")!;
+  // The SMS link must point at the VAULT (ethosifi.com), never the hub (ethosifi.xyz) or anything else.
+  if (!base.startsWith("https://ethosifi.com/")) return new Response("CONFIRM_BASE_URL must be on https://ethosifi.com/", { status: 500 });
+
   const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-  const provider = new ethers.JsonRpcProvider(Deno.env.get("RPC_URL")!);
+  const provider = new ethers.JsonRpcProvider(Deno.env.get("RPC_URL")!, undefined, { staticNetwork: true });
   const timelock = new ethers.Contract(Deno.env.get("TIMELOCK_ADDRESS")!, ABI, provider);
 
   const head = (await provider.getBlockNumber()) - CONFIRMATIONS;
-  const { data: cur } = await sb.from("notify_cursor").select("last_block").eq("id", 1).maybeSingle();
-  const from = cur ? Number(cur.last_block) + 1 : Number(Deno.env.get("START_BLOCK") ?? head);
+  const { data: cur, error: curErr } = await sb.from("notify_cursor").select("last_block").eq("id", 1).maybeSingle();
+  if (curErr) throw new Error(`cursor read: ${curErr.message}`); // never guess a start block on a DB error
+  const startEnv = Deno.env.get("START_BLOCK");
+  if (!cur && !startEnv) return new Response("first run needs START_BLOCK", { status: 500 });
+  // Re-scan a small overlap each run (reorg safety); notify_sent makes it idempotent.
+  const from = cur ? Math.max(0, Number(cur.last_block) + 1 - OVERLAP) : Number(startEnv);
   if (from > head) return Response.json({ ok: true, note: "up to date" });
   const to = Math.min(head, from + MAX_RANGE - 1);
 
   const logs = await timelock.queryFilter(timelock.filters.BiometricConfirmationRequested(), from, to);
   let sent = 0;
+  let firstFailedBlock: number | null = null;
 
   for (const l of logs) {
     const { account, txHash, expiresAt } = (l as ethers.EventLog).args;
+    const secsLeft = Number(expiresAt) - Date.now() / 1000;
+    if (secsLeft <= 0) continue; // already expired: nothing to confirm, don't text
     const acct = String(account).toLowerCase();
-    // Only verified numbers whose 72h "cool-off" has passed (a freshly added attacker number is inert).
-    const { data: phones } = await sb.from("notify_phones").select("phone_e164")
-      .eq("account", acct).eq("verified", true).lte("active_after", new Date().toISOString());
 
-    const link = `${Deno.env.get("CONFIRM_BASE_URL")}?acct=${account}&tx=${txHash}`;
-    const hours = Math.max(0, Math.round((Number(expiresAt) - Date.now() / 1000) / 3600));
+    const { data: phones, error: phErr } = await sb.from("notify_phones").select("phone_e164")
+      .eq("account", acct).eq("verified", true).lte("active_after", new Date().toISOString());
+    if (phErr) { firstFailedBlock ??= l.blockNumber; continue; }
+
+    const link = `${base}?acct=${account}&tx=${txHash}`;
+    const hours = Math.max(1, Math.floor(secsLeft / 3600));
     // Deliberately no amount/recipient/token in the text: those fields are caller-controlled
     // on-chain. The confirm page re-reads them from the chain and shows them in plain English.
     const body =
@@ -54,11 +71,17 @@ Deno.serve(async (req) => {
       `Didn't start this? Do nothing - it will expire. Never share codes.`;
 
     for (const p of phones ?? []) {
-      const { error: dup } = await sb.from("notify_sent").insert({ tx_hash: txHash, phone_e164: p.phone_e164 });
-      if (dup) continue; // already notified (unique key) — idempotent across retries
-      const sid = await sendSms(p.phone_e164, body);
-      if (!sid) { // send failed: free the slot so the next run retries
+      const { error: insErr } = await sb.from("notify_sent").insert({ tx_hash: txHash, phone_e164: p.phone_e164 });
+      if (insErr) {
+        if (insErr.code === "23505") continue; // genuine duplicate: already notified
+        firstFailedBlock ??= l.blockNumber;      // any other DB error: retry next run
+        continue;
+      }
+      let sid: string | null = null;
+      try { sid = await sendSms(p.phone_e164, body); } catch (e) { console.error("sms", e); }
+      if (!sid) { // failed: free the slot and keep the cursor behind this block so it retries
         await sb.from("notify_sent").delete().eq("tx_hash", txHash).eq("phone_e164", p.phone_e164);
+        firstFailedBlock ??= l.blockNumber;
         continue;
       }
       await sb.from("notify_sent").update({ twilio_sid: sid }).eq("tx_hash", txHash).eq("phone_e164", p.phone_e164);
@@ -66,8 +89,10 @@ Deno.serve(async (req) => {
     }
   }
 
-  await sb.from("notify_cursor").upsert({ id: 1, last_block: to });
-  return Response.json({ ok: true, from, to, events: logs.length, sent });
+  const newCursor = firstFailedBlock !== null ? Math.max(from - 1, firstFailedBlock - 1) : to;
+  const { error: upErr } = await sb.from("notify_cursor").upsert({ id: 1, last_block: newCursor });
+  if (upErr) throw new Error(`cursor write: ${upErr.message}`);
+  return Response.json({ ok: firstFailedBlock === null, from, to, cursor: newCursor, events: logs.length, sent });
 });
 
 async function sendSms(to: string, body: string): Promise<string | null> {

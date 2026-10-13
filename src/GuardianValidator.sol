@@ -4,7 +4,7 @@ pragma solidity ^0.8.23;
 import {IValidator} from "erc7579/interfaces/IERC7579Module.sol";
 import {PackedUserOperation} from "account-abstraction/interfaces/PackedUserOperation.sol";
 import {ReentrancyGuard} from "solady/utils/ReentrancyGuard.sol";
-import {IERC7579Account} from "erc7579/interfaces/IERC7579Account.sol";
+import {IERC7579Account, Execution} from "erc7579/interfaces/IERC7579Account.sol";
 import {ModeLib} from "erc7579/lib/ModeLib.sol";
 
 /**
@@ -548,8 +548,12 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
                 abi.encodeWithSignature("installModule(uint256,address,bytes)", 1, newValidator, installData);
 
             // Batch: [uninstall, install]
-            bytes memory batchData =
-                abi.encode(_buildExecution(account, 0, uninstallCall), _buildExecution(account, 0, installCall));
+            // ERC-7579 batch mode expects abi.encode(Execution[]) — the old code encoded two
+            // loose byte strings, which the account cannot decode.
+            Execution[] memory execs = new Execution[](2);
+            execs[0] = Execution({target: account, value: 0, callData: uninstallCall});
+            execs[1] = Execution({target: account, value: 0, callData: installCall});
+            bytes memory batchData = abi.encode(execs);
 
             IERC7579Account(account)
                 .executeFromExecutor(
@@ -565,7 +569,7 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
             IERC7579Account(account)
                 .executeFromExecutor(
                     ModeLib.encodeSimpleSingle(), // [FIXED] was a raw int literal, not a ModeCode
-                    abi.encode(account, uint256(0), rotateCall)
+                    abi.encodePacked(account, uint256(0), rotateCall)
                 );
         }
     }

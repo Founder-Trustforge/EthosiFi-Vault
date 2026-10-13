@@ -2,7 +2,7 @@
 pragma solidity ^0.8.23;
 import {PackedUserOperation} from "account-abstraction/interfaces/PackedUserOperation.sol";
 
-import {IModule} from "erc7579/interfaces/IERC7579Module.sol";
+import {IHook} from "erc7579/interfaces/IERC7579Module.sol";
 
 /**
  * @title MultiSigUpgradeGuard
@@ -14,7 +14,7 @@ import {IModule} from "erc7579/interfaces/IERC7579Module.sol";
  *
  * Layer: Core Security
  */
-contract MultiSigUpgradeGuard is IModule {
+contract MultiSigUpgradeGuard is IHook {
     uint256 constant MODULE_TYPE_HOOK = 4;
     uint256 public constant UPGRADE_DELAY = 72 hours; // 3-day mandatory wait
     uint256 public constant MAX_GUARDIANS = 10;
@@ -199,10 +199,16 @@ contract MultiSigUpgradeGuard is IModule {
     /**
      * @notice Pre-execution hook. Detects and blocks unauthorized upgrade calls.
      */
-    function preCheck(address account, address target, uint256, bytes calldata callData)
+    // [FIXED] Must match IHook.preCheck(msgSender, msgValue, msgData). The old
+    // 4-arg signature never matched, so the account's hook call would revert on
+    // EVERY execution (bricking the vault). A hook is called by the account itself,
+    // so `msg.sender` IS the account; nobody else can burn another account's grant.
+    function preCheck(address msgSender, uint256, bytes calldata callData)
         external
+        override
         returns (bytes memory)
     {
+        address account = msg.sender;
         // Detect installModule / uninstallModule selectors (ERC-7579)
         if (callData.length >= 4) {
             bytes4 selector = bytes4(callData[:4]);
@@ -237,7 +243,7 @@ contract MultiSigUpgradeGuard is IModule {
                         && grant.module == module && grant.moduleType == bytes4(uint32(moduleTypeId));
 
                     if (!grantValid) {
-                        emit UpgradeAttemptBlocked(account, msg.sender, target);
+                        emit UpgradeAttemptBlocked(account, msgSender, address(0));
                         revert("EthosiFi: Module upgrades require guardian consensus. Use proposeUpgrade().");
                     }
 
@@ -250,7 +256,7 @@ contract MultiSigUpgradeGuard is IModule {
         return "";
     }
 
-    function postCheck(bytes calldata) external pure {}
+    function postCheck(bytes calldata) external pure override {}
 
     // ─────────────────────────────────────────────
     // View Helpers

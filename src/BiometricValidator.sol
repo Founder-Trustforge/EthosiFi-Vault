@@ -94,8 +94,17 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
     /// @dev account → initialized flag
     mapping(address => bool) private _initialized;
 
-    /// @dev credentialId → Credential record
+    /// @dev keccak256(account, credentialId) → Credential record.
+    /// [CRIT FIXED] This was keyed by credentialId alone (global), so (a) a revoked id
+    /// could be re-registered by ANY account with the attacker's key and then satisfy
+    /// _isAccountCredential for the victim, and (b) anyone could squat a victim's
+    /// credentialId from the mempool. Keying by account removes both: an account's
+    /// credentials can only ever be touched by that account.
     mapping(bytes32 => Credential) private _credentials;
+
+    function _ck(address account, bytes32 credId) private pure returns (bytes32) {
+        return keccak256(abi.encode(account, credId));
+    }
 
     /// @dev account → list of credentialIds (supports multiple devices)
     mapping(address => bytes32[]) private _accountCredentials;
@@ -134,6 +143,7 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
     error CredentialAlreadyExists();
     error InvalidAuthenticatorData();
     error UserPresenceNotSet();
+    error UserVerificationNotSet();
     error InvalidClientDataType();
     error ChallengeMismatch();
     error InvalidSignature();
@@ -161,9 +171,10 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
         if (credentialId == bytes32(0)) revert NoCredential();
         if (pubKey[0] == 0 || pubKey[1] == 0) revert InvalidPublicKey();
         if (rpIdHash == bytes32(0)) revert InvalidRpIdHash();
-        if (_credentials[credentialId].active) revert CredentialAlreadyExists();
+        if (_credentials[_ck(msg.sender, credentialId)].active) revert CredentialAlreadyExists();
 
-        _credentials[credentialId] = Credential({publicKey: pubKey, active: true, registeredAt: block.timestamp});
+        _credentials[_ck(msg.sender, credentialId)] =
+            Credential({publicKey: pubKey, active: true, registeredAt: block.timestamp});
 
         _accountCredentials[msg.sender].push(credentialId);
         _primaryCredential[msg.sender] = credentialId;
@@ -179,7 +190,7 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
     function onUninstall(bytes calldata) external override {
         bytes32[] storage creds = _accountCredentials[msg.sender];
         for (uint256 i = 0; i < creds.length; i++) {
-            _credentials[creds[i]].active = false;
+            _credentials[_ck(msg.sender, creds[i])].active = false;
         }
         delete _accountCredentials[msg.sender];
         delete _primaryCredential[msg.sender];
@@ -224,7 +235,7 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
         // msg.sender.
         if (!_isAccountCredential(msg.sender, credId)) revert CredentialNotFound();
 
-        Credential storage cred = _credentials[credId];
+        Credential storage cred = _credentials[_ck(msg.sender, credId)];
         if (!cred.active) revert CredentialInactive();
 
         bool valid = _verifyWebAuthn(sig, cred.publicKey, userOpHash, _rpIdHashes[msg.sender]);
@@ -255,7 +266,7 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
         if (credId == bytes32(0)) return 0xffffffff;
         if (!_isAccountCredential(msg.sender, credId)) return 0xffffffff; // see validateUserOp
 
-        Credential storage cred = _credentials[credId];
+        Credential storage cred = _credentials[_ck(msg.sender, credId)];
         if (!cred.active) return 0xffffffff;
 
         // [FIXED] isValidSignatureWithSender must stay `view` per ERC-1271 /
@@ -289,7 +300,7 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
 
         // The credential must belong to THIS account and be active.
         if (!_isAccountCredential(account, credId)) return false;
-        Credential storage cred = _credentials[credId];
+        Credential storage cred = _credentials[_ck(account, credId)];
         if (!cred.active) return false;
 
         return _verifyWebAuthnView(sig, cred.publicKey, challenge, _rpIdHashes[account]);
@@ -307,10 +318,11 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
         if (!_initialized[msg.sender]) revert ModuleNotInitialized();
         if (credentialId == bytes32(0)) revert NoCredential();
         if (pubKey[0] == 0 || pubKey[1] == 0) revert InvalidPublicKey();
-        if (_credentials[credentialId].active) revert CredentialAlreadyExists();
+        if (_credentials[_ck(msg.sender, credentialId)].active) revert CredentialAlreadyExists();
 
-        _credentials[credentialId] = Credential({publicKey: pubKey, active: true, registeredAt: block.timestamp});
-        _accountCredentials[msg.sender].push(credentialId);
+        _credentials[_ck(msg.sender, credentialId)] =
+            Credential({publicKey: pubKey, active: true, registeredAt: block.timestamp});
+        if (!_isAccountCredential(msg.sender, credentialId)) _accountCredentials[msg.sender].push(credentialId);
 
         emit CredentialRegistered(msg.sender, credentialId, false);
     }
@@ -327,13 +339,13 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
         uint256 activeCount = _activeCredentialCount(msg.sender);
         require(activeCount > 1, "Cannot revoke last credential");
 
-        _credentials[credentialId].active = false;
+        _credentials[_ck(msg.sender, credentialId)].active = false;
 
         // If revoking primary, promote oldest other active credential
         if (_primaryCredential[msg.sender] == credentialId) {
             bytes32[] storage creds = _accountCredentials[msg.sender];
             for (uint256 i = 0; i < creds.length; i++) {
-                if (creds[i] != credentialId && _credentials[creds[i]].active) {
+                if (creds[i] != credentialId && _credentials[_ck(msg.sender, creds[i])].active) {
                     _primaryCredential[msg.sender] = creds[i];
                     emit PrimaryCredentialChanged(msg.sender, creds[i]);
                     break;
@@ -350,7 +362,7 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
     function setPrimaryCredential(bytes32 credentialId) external {
         if (!_initialized[msg.sender]) revert ModuleNotInitialized();
         if (!_isAccountCredential(msg.sender, credentialId)) revert CredentialNotFound();
-        if (!_credentials[credentialId].active) revert CredentialInactive();
+        if (!_credentials[_ck(msg.sender, credentialId)].active) revert CredentialInactive();
 
         _primaryCredential[msg.sender] = credentialId;
         emit PrimaryCredentialChanged(msg.sender, credentialId);
@@ -360,12 +372,12 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
     // View helpers
     // ─────────────────────────────────────────────────────────────
 
-    function getCredential(bytes32 credentialId)
+    function getCredential(address account, bytes32 credentialId)
         external
         view
         returns (uint256[2] memory publicKey, bool active, uint256 registeredAt)
     {
-        Credential storage c = _credentials[credentialId];
+        Credential storage c = _credentials[_ck(account, credentialId)];
         return (c.publicKey, c.active, c.registeredAt);
     }
 
@@ -450,6 +462,9 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
         // ── Step 3: User Presence flag ────────────────────────────
         uint8 flags = uint8(sig.authenticatorData[32]);
         if (flags & AUTH_FLAG_UP == 0) revert UserPresenceNotSet();
+        // User VERIFICATION (fingerprint/PIN), not just presence (a tap). Without this
+        // a page that requests userVerification:"discouraged" yields a valid assertion.
+        if (flags & AUTH_FLAG_UV == 0) revert UserVerificationNotSet();
 
         // ── Step 4: clientDataJSON type ───────────────────────────
         // Must contain `"type":"webauthn.get"` or `"type": "webauthn.get"`
@@ -619,7 +634,7 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
     function _activeCredentialCount(address account) internal view returns (uint256 count) {
         bytes32[] storage creds = _accountCredentials[account];
         for (uint256 i = 0; i < creds.length; i++) {
-            if (_credentials[creds[i]].active) count++;
+            if (_credentials[_ck(account, creds[i])].active) count++;
         }
     }
 }
