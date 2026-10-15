@@ -1,0 +1,52 @@
+name: Deploy to Sepolia (manual)
+
+permissions: {}
+
+on:
+  workflow_dispatch:
+    inputs:
+      what:
+        description: "Which deployment to run"
+        type: choice
+        options: [vault, token-suite]
+        default: vault
+
+# Needs repository secrets: DEPLOYER_PRIVATE_KEY, SEPOLIA_RPC, ETHERSCAN_API_KEY.
+# Token suite also needs: TREASURY, ECOSYSTEM, EARLY_CONTRIBUTORS, PUBLIC_LAUNCH, TEAM_VESTING (addresses).
+# Use a fresh testnet-only deployer key. Addresses are printed in the job log: copy them into frontend/index.html.
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    environment: sepolia
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - uses: foundry-rs/foundry-toolchain@v1
+      - name: Install Solidity dependencies
+        run: npm install --no-audit --no-fund --ignore-scripts
+        working-directory: lib/erc7579-implementation
+      - name: Build
+        run: forge build
+      - name: Deploy vault system
+        if: ${{ inputs.what == 'vault' }}
+        env:
+          PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+        run: >
+          forge script script/Deploy.s.sol --rpc-url "${{ secrets.SEPOLIA_RPC }}" --broadcast --verify
+          --etherscan-api-key "${{ secrets.ETHERSCAN_API_KEY }}" -vv
+      - name: Deploy token suite
+        if: ${{ inputs.what == 'token-suite' }}
+        env:
+          PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+          TREASURY: ${{ secrets.TREASURY }}
+          ECOSYSTEM: ${{ secrets.ECOSYSTEM }}
+          EARLY_CONTRIBUTORS: ${{ secrets.EARLY_CONTRIBUTORS }}
+          PUBLIC_LAUNCH: ${{ secrets.PUBLIC_LAUNCH }}
+          TEAM_VESTING: ${{ secrets.TEAM_VESTING }}
+        run: >
+          forge script script/DeployToken.s.sol --rpc-url "${{ secrets.SEPOLIA_RPC }}" --broadcast --verify
+          --etherscan-api-key "${{ secrets.ETHERSCAN_API_KEY }}" -vv
