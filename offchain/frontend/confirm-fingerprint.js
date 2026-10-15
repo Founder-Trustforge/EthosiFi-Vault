@@ -20,16 +20,9 @@ export async function loadRequest(provider, timelockAddr, acct, txHash) {
 
 const RP_ID = "ethosifi.com"; // the Vault domain (the hub is ethosifi.xyz - do not use it here)
 
-export async function confirmWithFingerprint({ signer, timelockAddr, biometricAddr, acct, txHash, credentialIdBytes32, credentialIdRaw }) {
-  const tl = new ethers.Contract(timelockAddr, TL_ABI, signer);
-  const challenge = await tl.confirmationChallenge(acct, txHash); // bytes32 hex
-
-  // Refuse to prompt if the on-chain enrolled RP ID differs from this page's - it could never verify.
-  const bio = new ethers.Contract(biometricAddr, ["function getRpIdHash(address) view returns (bytes32)"], signer);
-  const enrolled = await bio.getRpIdHash(acct);
-  const expected = ethers.sha256(ethers.toUtf8Bytes(RP_ID));
-  if (enrolled !== expected) throw new Error("This vault's passkey was enrolled for a different domain");
-
+/** Ask the device for the enrolled fingerprint/passkey over `challenge` (bytes32 hex); returns the ABI-encoded
+ *  WebAuthnSignature that BiometricValidator.verifyConfirmation / confirmAndRelease expect. */
+export async function signChallenge({ challenge, credentialIdBytes32, credentialIdRaw }) {
   const cred = await navigator.credentials.get({
     publicKey: {
       challenge: ethers.getBytes(challenge),
@@ -45,17 +38,29 @@ export async function confirmWithFingerprint({ signer, timelockAddr, biometricAd
   if (text.indexOf(key) < 0) throw new Error("Unexpected clientDataJSON");
   const challengeOffset = text.indexOf(key) + key.length;
   const { r: rr, s } = derToRS(new Uint8Array(r.signature));
-
-  const encoded = ethers.AbiCoder.defaultAbiCoder().encode([SIG_TYPE], [[
+  return ethers.AbiCoder.defaultAbiCoder().encode([SIG_TYPE], [[
     new Uint8Array(r.authenticatorData), clientDataJSON, challengeOffset, [rr, s], credentialIdBytes32,
   ]]);
+}
+
+export async function confirmWithFingerprint({ signer, timelockAddr, biometricAddr, acct, txHash, credentialIdBytes32, credentialIdRaw }) {
+  const tl = new ethers.Contract(timelockAddr, TL_ABI, signer);
+  const challenge = await tl.confirmationChallenge(acct, txHash); // bytes32 hex
+
+  // Refuse to prompt if the on-chain enrolled RP ID differs from this page's - it could never verify.
+  const bio = new ethers.Contract(biometricAddr, ["function getRpIdHash(address) view returns (bytes32)"], signer);
+  const enrolled = await bio.getRpIdHash(acct);
+  const expected = ethers.sha256(ethers.toUtf8Bytes(RP_ID));
+  if (enrolled !== expected) throw new Error("This vault's passkey was enrolled for a different domain");
+
+  const encoded = await signChallenge({ challenge, credentialIdBytes32, credentialIdRaw });
   const tx = await tl.confirmAndRelease(acct, txHash, encoded);
   return tx.wait();
 }
 
 // WebAuthn returns an ASN.1 DER ECDSA signature; the contract wants raw (r, s). Low-s is normalised
 // defensively (the contract does not require it).
-function derToRS(der) {
+export function derToRS(der) {
   let o = 2; if (der[1] & 0x80) o += der[1] & 0x7f;
   const rl = der[o + 1]; const r = der.slice(o + 2, o + 2 + rl);
   o = o + 2 + rl; const sl = der[o + 1]; const s = der.slice(o + 2, o + 2 + sl);

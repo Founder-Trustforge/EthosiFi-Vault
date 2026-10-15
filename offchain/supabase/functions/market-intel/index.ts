@@ -9,9 +9,11 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const COINS = ["bitcoin", "ethereum", "solana", "usd-coin", "tether", "chainlink"];
 
 Deno.serve(async (req) => {
-  if (req.headers.get("x-cron-secret") !== Deno.env.get("CRON_SECRET")) {
-    return new Response("forbidden", { status: 403 });
-  }
+  const secret = Deno.env.get("CRON_SECRET");
+  const given = req.headers.get("x-cron-secret") ?? "";
+  let diff = given.length ^ (secret?.length ?? -1);
+  for (let i = 0; i < given.length; i++) diff |= given.charCodeAt(i) ^ (secret?.charCodeAt(i) ?? 0);
+  if (!secret || diff !== 0) return new Response("forbidden", { status: 403 });
   const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
   const [prices, scams] = await Promise.all([fetchPrices(), fetchHacks()]);
@@ -76,7 +78,7 @@ async function summarize(prices: unknown[], scams: unknown[]): Promise<string> {
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model: Deno.env.get("ANTHROPIC_MODEL") ?? "claude-sonnet-5",
+      model: Deno.env.get("ANTHROPIC_MODEL") ?? "claude-sonnet-5-5",
       max_tokens: 400,
       system:
         "You write EthosiFi's daily crypto security briefing for everyday users. Use ONLY the JSON data provided. " +

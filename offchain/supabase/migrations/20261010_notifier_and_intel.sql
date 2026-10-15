@@ -37,3 +37,28 @@ create table if not exists public.market_intel (
 );
 alter table public.market_intel enable row level security;
 create policy "public read market_intel" on public.market_intel for select using (true);
+
+-- Phone enrollment (one row per challenge). Service role only. Proves BOTH vault ownership (passkey assertion
+-- verified on-chain) and phone control (SMS one-time code) before a number is ever added.
+create table if not exists public.notify_enroll (
+  nonce text primary key,                 -- 32 random bytes, hex
+  account text not null,
+  phone_e164 text not null,
+  kind text not null check (kind in ('add','remove')),
+  challenge text not null,                -- 0x… bytes32 the passkey must sign
+  expires_at timestamptz not null,
+  code_hash text,                         -- sha256(nonce:code:pepper); set once, when the SMS is sent
+  code_expires_at timestamptz,
+  attempts int not null default 0,
+  used boolean not null default false,
+  created_at timestamptz not null default now()
+);
+create index if not exists notify_enroll_account_idx on public.notify_enroll (account, created_at);
+create index if not exists notify_enroll_phone_idx on public.notify_enroll (phone_e164, created_at);
+alter table public.notify_enroll enable row level security;
+
+create or replace function public.notify_enroll_attempt(p_nonce text) returns int
+language sql security definer set search_path = public as $$
+  update public.notify_enroll set attempts = attempts + 1 where nonce = p_nonce and not used returning attempts;
+$$;
+revoke all on function public.notify_enroll_attempt(text) from public, anon, authenticated;

@@ -20,10 +20,18 @@ const ABI = [
 const MAX_RANGE = 2000;   // blocks per run
 const CONFIRMATIONS = 6;  // avoid reorg noise
 const OVERLAP = 12;       // blocks re-scanned every run
+const MAX_SMS_PER_HOUR = 6;
+
+function constEq(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let d = 0;
+  for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return d === 0;
+}
 
 Deno.serve(async (req) => {
   const secret = Deno.env.get("CRON_SECRET");
-  if (!secret || req.headers.get("x-cron-secret") !== secret) {
+  if (!secret || !constEq(req.headers.get("x-cron-secret") ?? "", secret)) {
     return new Response("forbidden", { status: 403 });
   }
   for (const k of ["RPC_URL", "TIMELOCK_ADDRESS", "CONFIRM_BASE_URL", "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM"]) {
@@ -71,6 +79,11 @@ Deno.serve(async (req) => {
       `Didn't start this? Do nothing - it will expire. Never share codes.`;
 
     for (const p of phones ?? []) {
+      // Cost / harassment cap: a stolen spending key can queue transfers, but never makes us text a number > MAX_SMS_PER_HOUR/h.
+      const { count: recent, error: rateErr } = await sb.from("notify_sent").select("tx_hash", { count: "exact", head: true })
+        .eq("phone_e164", p.phone_e164).gte("sent_at", new Date(Date.now() - 3_600_000).toISOString());
+      if (rateErr) { firstFailedBlock ??= l.blockNumber; continue; }
+      if ((recent ?? 0) >= MAX_SMS_PER_HOUR) { console.warn("rate-limited", p.phone_e164.slice(0, 5) + "…"); continue; }
       const { error: insErr } = await sb.from("notify_sent").insert({ tx_hash: txHash, phone_e164: p.phone_e164 });
       if (insErr) {
         if (insErr.code === "23505") continue; // genuine duplicate: already notified

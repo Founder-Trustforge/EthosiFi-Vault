@@ -6,6 +6,7 @@ import {ReentrancyGuard} from "solady/utils/ReentrancyGuard.sol";
 interface IEthosStaking {
     function isMVP(address account) external view returns (bool);
     function getGovernanceVotes(address account) external view returns (uint256);
+    function votingPowerSince(address account) external view returns (uint256);
 }
 
 /**
@@ -37,6 +38,9 @@ contract EthosGovernance is ReentrancyGuard {
     uint256 public constant TIMELOCK_PERIOD = 2 days;
     uint256 public constant QUORUM_VOTES = 100;
     uint256 public constant MAX_TARGETS = 20;
+    /// @dev A passed proposal can only be executed inside this window after its timelock, so an old
+    ///      approval cannot be replayed against a very different protocol state months later.
+    uint256 public constant EXECUTION_WINDOW = 14 days;
 
     // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -116,6 +120,7 @@ contract EthosGovernance is ReentrancyGuard {
     error TargetNotApproved();
     error SelectorNotApproved();
     error ExecutionFailed();
+    error ProposalExpired();
     error ZeroAddress();
 
     // ─── Constructor ──────────────────────────────────────────────────────────
@@ -175,7 +180,12 @@ contract EthosGovernance is ReentrancyGuard {
 
         Proposal storage p = proposals[proposalId];
         if (p.status != ProposalStatus.ACTIVE) revert ProposalNotActive();
-        if (block.timestamp > p.endTime) revert VotingEnded();
+        // Strictly before the end: with `<=` a voter could vote, start unstaking, and have the same
+        // tokens vote again from another address on the exact closing second.
+        if (block.timestamp >= p.endTime) revert VotingEnded();
+        if (p.startTime == 0) revert ProposalNotActive();
+        // Snapshot rule: only stake that existed before the proposal counts (no borrow-vote-return).
+        if (stakingContract.votingPowerSince(msg.sender) >= p.startTime) revert NoVotingPower();
         if (hasVoted[proposalId][msg.sender]) revert AlreadyVoted();
 
         uint256 votes = stakingContract.getGovernanceVotes(msg.sender);
@@ -193,7 +203,7 @@ contract EthosGovernance is ReentrancyGuard {
     function finalizeProposal(uint256 proposalId) external {
         Proposal storage p = proposals[proposalId];
         if (p.status != ProposalStatus.ACTIVE) revert ProposalNotActive();
-        if (block.timestamp <= p.endTime) revert VotingNotEnded();
+        if (block.timestamp < p.endTime) revert VotingNotEnded();
 
         uint256 totalVotes = p.votesFor + p.votesAgainst;
 
@@ -217,6 +227,7 @@ contract EthosGovernance is ReentrancyGuard {
         if (p.status != ProposalStatus.PASSED) revert ProposalNotPassed();
         if (p.executed) revert AlreadyExecuted();
         if (block.timestamp < p.executionTime) revert TimelockNotMet();
+        if (block.timestamp > p.executionTime + EXECUTION_WINDOW) revert ProposalExpired();
 
         // [CRIT-1] Effects before interactions
         p.executed = true;
@@ -304,7 +315,7 @@ contract EthosGovernance is ReentrancyGuard {
         uint256[] memory temp = new uint256[](limit);
         uint256 count;
         for (uint256 i = offset + 1; i <= proposalCount && count < limit; i++) {
-            if (proposals[i].status == ProposalStatus.ACTIVE && block.timestamp <= proposals[i].endTime) {
+            if (proposals[i].status == ProposalStatus.ACTIVE && block.timestamp < proposals[i].endTime) {
                 temp[count++] = i;
             }
         }

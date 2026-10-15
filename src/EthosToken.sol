@@ -139,14 +139,24 @@ contract EthosToken {
     function transferFrom(address from, address to, uint256 amount) external returns (bool) {
         if (to == address(0)) revert ZeroAddress();
         if (balanceOf[from] < amount) revert InsufficientBalance();
-        if (allowance[from][msg.sender] < amount) revert InsufficientAllowance();
+        _spendAllowance(from, msg.sender, amount);
         unchecked {
             balanceOf[from] -= amount;
-            allowance[from][msg.sender] -= amount;
             balanceOf[to] += amount;
         }
         emit Transfer(from, to, amount);
         return true;
+    }
+
+    /// @dev Standard allowance spend; `type(uint256).max` means unlimited and is not decremented.
+    function _spendAllowance(address from, address spender, uint256 amount) internal {
+        uint256 a = allowance[from][spender];
+        if (a < amount) revert InsufficientAllowance();
+        if (a != type(uint256).max) {
+            unchecked {
+                allowance[from][spender] = a - amount;
+            }
+        }
     }
 
     // ─── Burn ─────────────────────────────────────────────────────────────────
@@ -161,6 +171,8 @@ contract EthosToken {
         if (!authorizedBurners[msg.sender]) revert NotAuthorizedBurner();
         if (amount == 0) revert ZeroAmount();
         if (balanceOf[from] < amount) revert InsufficientBalance();
+        // A burner may burn its own balance freely, but can only burn someone else's with their allowance.
+        if (from != msg.sender) _spendAllowance(from, msg.sender, amount);
         unchecked {
             balanceOf[from] -= amount;
             totalSupply -= amount;
@@ -185,6 +197,8 @@ contract EthosToken {
     function burnSubscriptionFee(address subscriber) external {
         if (!authorizedBurners[msg.sender]) revert NotAuthorizedBurner();
         if (balanceOf[subscriber] < SUBSCRIPTION_BURN) revert InsufficientBalance();
+        // The subscriber must have approved the burner for at least the fee (consent).
+        if (subscriber != msg.sender) _spendAllowance(subscriber, msg.sender, SUBSCRIPTION_BURN);
         unchecked {
             balanceOf[subscriber] -= SUBSCRIPTION_BURN;
             totalSupply -= SUBSCRIPTION_BURN;
@@ -195,6 +209,27 @@ contract EthosToken {
     }
 
     // ─── Owner functions ──────────────────────────────────────────────────────
+
+    event PoolDistributed(address indexed to, uint256 amount, uint256 poolRemaining);
+
+    /**
+     * @notice Release tokens held by this contract (rewards pool + unvested team half) to `to`.
+     * @dev Without this the 50M tokens minted to the contract at deployment could never leave.
+     * The owner SHOULD be a multisig/timelock; every release is public and evented.
+     */
+    function distributePool(address to, uint256 amount) external {
+        if (msg.sender != owner) revert NotOwner();
+        if (to == address(0) || to == address(this)) revert ZeroAddress();
+        if (amount == 0) revert ZeroAmount();
+        uint256 bal = balanceOf[address(this)];
+        if (bal < amount) revert InsufficientBalance();
+        unchecked {
+            balanceOf[address(this)] = bal - amount;
+            balanceOf[to] += amount;
+        }
+        emit Transfer(address(this), to, amount);
+        emit PoolDistributed(to, amount, bal - amount);
+    }
 
     function authorizeBurner(address burner) external {
         if (msg.sender != owner) revert NotOwner();

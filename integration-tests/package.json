@@ -3,7 +3,10 @@
   "private": true,
   "version": "1.0.0",
   "description": "End-to-end tests: real EntryPoint v0.7 + MSAAdvanced account + all EthosiFi modules on a Cancun EVM",
-  "scripts": { "build": "node build.js", "test": "node suite.js" },
+  "scripts": {
+    "build": "node build.js",
+    "test": "node suite.js && node suite_token.js && node suite_offchain.js"
+  },
   "dependencies": {
     "@openzeppelin/contracts": "^5.0.0",
     "ethers": "^6.13.0",

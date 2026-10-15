@@ -37,6 +37,9 @@ contract EthosMVPBadge {
     // tokenId => Badge
     mapping(uint256 => Badge) public badges;
 
+    // holder => bitmask of sources currently granting a tier (bit0 = MVP, bit1 = LP)
+    mapping(address => uint8) public tierFlags;
+
     // address => tokenId (0 = no badge)
     mapping(address => uint256) public holderToken;
 
@@ -139,7 +142,8 @@ contract EthosMVPBadge {
     // ─── MINT & REVOKE ───────────────────────────────────────────────────────
 
     /**
-     * @notice Mint a badge to an address
+     * @notice Grant a tier to an address. A holder keeps ONE badge; each source (staking = tier 1,
+     * LP manager = tier 2) adds its own tier flag, and the badge shows the highest flag held.
      * @param to Recipient address
      * @param tier Badge tier (1=MVP, 2=LP)
      */
@@ -147,14 +151,23 @@ contract EthosMVPBadge {
         if (!authorizedMinters[msg.sender]) revert NotAuthorizedMinter();
         if (to == address(0)) revert ZeroAddress();
         if (tier == 0 || tier > 2) revert InvalidTier();
-        if (holderToken[to] != 0 && badges[holderToken[to]].active) revert AlreadyHasBadge();
 
-        uint256 tokenId = _tokenIdCounter++;
+        uint8 bit = uint8(1) << (tier - 1);
+        uint256 tokenId = holderToken[to];
 
+        if (tokenId != 0 && badges[tokenId].active) {
+            // Existing active badge: add this source's flag.
+            if (tierFlags[to] & bit != 0) revert AlreadyHasBadge();
+            tierFlags[to] |= bit;
+            _syncTier(to, tokenId);
+            return;
+        }
+
+        tokenId = _tokenIdCounter++;
         badges[tokenId] = Badge({tier: tier, mintedAt: block.timestamp, active: true});
-
         tokenOwner[tokenId] = to;
         holderToken[to] = tokenId;
+        tierFlags[to] = bit;
 
         totalByTier[tier]++;
         totalActive++;
@@ -164,41 +177,41 @@ contract EthosMVPBadge {
     }
 
     /**
-     * @notice Revoke a badge (called when user unstakes or removes LP)
+     * @notice Withdraw one source's tier from a holder. The badge is burned only when no source remains.
+     * @dev Unlike the old single-flag revoke, losing LP status no longer destroys a staker's MVP badge.
      */
-    function revokeBadge(address from) external {
+    function revokeBadge(address from, uint8 tier) external {
         if (!authorizedMinters[msg.sender]) revert NotAuthorizedMinter();
+        if (tier == 0 || tier > 2) revert InvalidTier();
 
         uint256 tokenId = holderToken[from];
         if (tokenId == 0 || !badges[tokenId].active) revert NoBadge();
 
-        uint8 tier = badges[tokenId].tier;
-        badges[tokenId].active = false;
+        uint8 bit = uint8(1) << (tier - 1);
+        if (tierFlags[from] & bit == 0) revert NoBadge();
+        tierFlags[from] &= ~bit;
 
-        totalByTier[tier]--;
-        totalActive--;
-
-        emit Transfer(from, address(0), tokenId);
-        emit BadgeRevoked(from, tokenId, tier);
+        if (tierFlags[from] == 0) {
+            uint8 old = badges[tokenId].tier;
+            badges[tokenId].active = false;
+            totalByTier[old]--;
+            totalActive--;
+            emit Transfer(from, address(0), tokenId);
+            emit BadgeRevoked(from, tokenId, old);
+        } else {
+            _syncTier(from, tokenId);
+        }
     }
 
-    /**
-     * @notice Upgrade a badge from MVP to LP tier
-     */
-    function upgradeBadge(address holder) external {
-        if (!authorizedMinters[msg.sender]) revert NotAuthorizedMinter();
-
-        uint256 tokenId = holderToken[holder];
-        if (tokenId == 0 || !badges[tokenId].active) revert NoBadge();
-        if (badges[tokenId].tier == TIER_LP) return; // Already LP tier
-
+    function _syncTier(address holder, uint256 tokenId) internal {
+        uint8 flags = tierFlags[holder];
+        uint8 newTier = flags & 2 != 0 ? TIER_LP : TIER_MVP;
         uint8 oldTier = badges[tokenId].tier;
-        badges[tokenId].tier = TIER_LP;
-
+        if (newTier == oldTier) return;
+        badges[tokenId].tier = newTier;
         totalByTier[oldTier]--;
-        totalByTier[TIER_LP]++;
-
-        emit BadgeUpgraded(holder, tokenId, oldTier, TIER_LP);
+        totalByTier[newTier]++;
+        emit BadgeUpgraded(holder, tokenId, oldTier, newTier);
     }
 
     // ─── VIEW FUNCTIONS ──────────────────────────────────────────────────────
@@ -225,11 +238,11 @@ contract EthosMVPBadge {
     // ─── SVG GENERATION ──────────────────────────────────────────────────────
 
     function _mvpBadgeSVG() internal pure returns (string memory) {
-        return "<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 200 200%22><rect width=%22200%22 height=%22200%22 rx=%2220%22 fill=%22%231A1A2E%22/><circle cx=%22100%22 cy=%2270%22 r=%2240%22 fill=%22none%22 stroke=%220F3460%22 stroke-width=%223%22/><text x=%22100%22 y=%2278%22 text-anchor=%22middle%22 font-size=%2228%22 fill=%220F3460%22 font-family=%22Arial%22>E</text><text x=%22100%22 y=%22130%22 text-anchor=%22middle%22 font-size=%2214%22 fill=%22white%22 font-family=%22Arial%22>EthosiFi MVP</text><text x=%22100%22 y=%22150%22 text-anchor=%22middle%22 font-size=%2210%22 fill=%22666666%22 font-family=%22Arial%22>Vault Security Member</text></svg>";
+        return "<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 200 200%22><rect width=%22200%22 height=%22200%22 rx=%2220%22 fill=%22%231A1A2E%22/><circle cx=%22100%22 cy=%2270%22 r=%2240%22 fill=%22none%22 stroke=%22%230F3460%22 stroke-width=%223%22/><text x=%22100%22 y=%2278%22 text-anchor=%22middle%22 font-size=%2228%22 fill=%22%230F3460%22 font-family=%22Arial%22>E</text><text x=%22100%22 y=%22130%22 text-anchor=%22middle%22 font-size=%2214%22 fill=%22white%22 font-family=%22Arial%22>EthosiFi MVP</text><text x=%22100%22 y=%22150%22 text-anchor=%22middle%22 font-size=%2210%22 fill=%22666666%22 font-family=%22Arial%22>Vault Security Member</text></svg>";
     }
 
     function _goldBadgeSVG() internal pure returns (string memory) {
-        return "<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 200 200%22><rect width=%22200%22 height=%22200%22 rx=%2220%22 fill=%22%231A1A2E%22/><circle cx=%22100%22 cy=%2270%22 r=%2240%22 fill=%22none%22 stroke=%22FFD700%22 stroke-width=%223%22/><text x=%22100%22 y=%2278%22 text-anchor=%22middle%22 font-size=%2228%22 fill=%22FFD700%22 font-family=%22Arial%22>E</text><text x=%22100%22 y=%22130%22 text-anchor=%22middle%22 font-size=%2214%22 fill=%22FFD700%22 font-family=%22Arial%22>EthosiFi LP Gold</text><text x=%22100%22 y=%22150%22 text-anchor=%22middle%22 font-size=%2210%22 fill=%22666666%22 font-family=%22Arial%22>Liquidity Provider</text></svg>";
+        return "<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 200 200%22><rect width=%22200%22 height=%22200%22 rx=%2220%22 fill=%22%231A1A2E%22/><circle cx=%22100%22 cy=%2270%22 r=%2240%22 fill=%22none%22 stroke=%22%23FFD700%22 stroke-width=%223%22/><text x=%22100%22 y=%2278%22 text-anchor=%22middle%22 font-size=%2228%22 fill=%22%23FFD700%22 font-family=%22Arial%22>E</text><text x=%22100%22 y=%22130%22 text-anchor=%22middle%22 font-size=%2214%22 fill=%22%23FFD700%22 font-family=%22Arial%22>EthosiFi LP Gold</text><text x=%22100%22 y=%22150%22 text-anchor=%22middle%22 font-size=%2210%22 fill=%22666666%22 font-family=%22Arial%22>Liquidity Provider</text></svg>";
     }
 
     // ─── OWNER FUNCTIONS ─────────────────────────────────────────────────────

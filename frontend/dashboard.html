@@ -269,6 +269,11 @@ document.addEventListener('mousemove',e=>{mx=e.clientX;my=e.clientY;cur.style.le
 
 let activeCount=3;
 
+const ADDR_RE=/^0x[0-9a-fA-F]{40}$/;
+if(window.ethereum&&window.ethereum.on){
+  window.ethereum.on('accountsChanged',()=>location.reload());
+  window.ethereum.on('chainChanged',()=>location.reload());
+}
 async function connectWallet(){
   if(typeof window.ethereum==='undefined'){alert('Please install MetaMask from metamask.io');return;}
   try{
@@ -278,6 +283,7 @@ async function connectWallet(){
       try{await window.ethereum.request({method:'wallet_switchEthereumChain',params:[{chainId:'0xaa36a7'}]});}
       catch(se){if(se.code===4902){await window.ethereum.request({method:'wallet_addEthereumChain',params:[{chainId:'0xaa36a7',chainName:'Sepolia Test Network',nativeCurrency:{name:'ETH',symbol:'ETH',decimals:18},rpcUrls:['https://rpc.sepolia.org'],blockExplorerUrls:['https://sepolia.etherscan.io']}]});}}
     }
+    if(!accounts||!ADDR_RE.test(accounts[0]||'')){alert('Wallet returned an unexpected account.');return;}
     showDashboard(accounts[0]);
   }catch(err){if(err.code!==4001)alert('Connection failed: '+err.message);}
 }
@@ -312,9 +318,8 @@ function showSection(name){
 }
 
 function freezeVault(){
-  if(confirm('EMERGENCY FREEZE: This will immediately lock your vault and prevent all transactions until you manually unfreeze it. Proceed?')){
-    alert('🧊 Vault Freeze Initiated\n\nIn production this broadcasts an EmergencyFreeze transaction to the contract at:\n0xa70679b3d903e649a0a81ef1b9878ee64996ecfd\n\nNo funds can move until you unfreeze. This is a testnet demonstration.');
-  }
+  // Demo preview: this page is not wired to a vault. Never imply that a freeze happened.
+  alert('Demo preview: this button is not connected to a vault yet, so NOTHING was frozen.\n\nIf you suspect theft, use your vault with your passkey, or contact support, instead of this page.');
 }
 
 function scanAddress(){
@@ -322,13 +327,13 @@ function scanAddress(){
   const result=document.getElementById('scanResult');
   if(!/^0x[a-fA-F0-9]{40}$/.test(addr)){result.style.display='block';result.className='scan-result danger';result.textContent='❌ Invalid address format. Must be 0x followed by 40 hex characters.';return;}
   result.style.display='block';
-  result.className='scan-result safe';
-  result.textContent='✅ Address scanned: '+addr.slice(0,10)+'...'+addr.slice(-8)+'\nNo threats detected in testnet databases. On mainnet this checks against live scam registries, poisoning patterns, and on-chain behavior analysis.';
+  result.className='scan-result danger';
+  result.textContent='ℹ️ '+addr.slice(0,10)+'...'+addr.slice(-8)+'\nFormat is valid, but this preview does NOT check scam registries yet. Do not treat any address as safe because of this tool. Always verify the full address and recipient yourself.';
 }
 
 // Auto-connect if already connected
 if(typeof window.ethereum!=='undefined'){
-  window.ethereum.request({method:'eth_accounts'}).then(accounts=>{if(accounts.length>0)showDashboard(accounts[0]);});
+  window.ethereum.request({method:'eth_accounts'}).then(accounts=>{if(accounts.length>0&&ADDR_RE.test(accounts[0]))showDashboard(accounts[0]);});
 }
 </script>
 </body>

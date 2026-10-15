@@ -2,6 +2,7 @@
 pragma solidity ^0.8.23;
 
 import {ReentrancyGuard} from "solady/utils/ReentrancyGuard.sol";
+import {V3Math} from "./lib/V3Math.sol";
 
 interface IEthosToken {
     function burnSubscriptionFee(address subscriber) external;
@@ -11,8 +12,7 @@ interface IEthosToken {
 
 interface IEthosMVPBadge {
     function mintBadge(address to, uint8 tier) external;
-    function revokeBadge(address from) external;
-    function upgradeBadge(address holder) external;
+    function revokeBadge(address from, uint8 tier) external;
     function hasBadge(address account) external view returns (bool);
     function getBadgeTier(address account) external view returns (uint8);
 }
@@ -59,6 +59,11 @@ interface IUniswapV3Pool {
     function token0() external view returns (address);
     function token1() external view returns (address);
     function liquidity() external view returns (uint128);
+    function fee() external view returns (uint24);
+    function observe(uint32[] calldata secondsAgos)
+        external
+        view
+        returns (int56[] memory tickCumulatives, uint160[] memory secondsPerLiquidityCumulativeX128s);
 }
 
 /**
@@ -103,6 +108,9 @@ contract EthosLiquidityManager is ReentrancyGuard {
     IEthosMVPBadge public mvpBadge;
     INonfungiblePositionManager public positionManager;
     address public ethosUsdcPool; // $ETHOS/USDC Uniswap V3 pool
+    uint24 public poolFee; // fee tier of that pool; positions in any other tier are rejected
+    /// @dev Uniswap position NFT id => provider currently registered with it (one provider per NFT).
+    mapping(uint256 => address) public positionClaimedBy;
     address public ethosTokenAddr; // $ETHOS token address
     address public usdcTokenAddr; // USDC token address
     address public owner;
@@ -114,6 +122,9 @@ contract EthosLiquidityManager is ReentrancyGuard {
     uint256 public constant MONTHLY_BURN = 100 * 1e18;
     uint256 public constant BURN_INTERVAL = 30 days;
     uint8 public constant TIER_LP = 2;
+    uint32 public constant TWAP_WINDOW = 30 minutes;
+    /// @dev After a missed monthly burn the badge lapses once this grace period ends (anyone can trigger).
+    uint256 public constant BURN_GRACE = 7 days;
 
     // ─── State ────────────────────────────────────────────────────────────────
 
@@ -155,6 +166,10 @@ contract EthosLiquidityManager is ReentrancyGuard {
     error TransferFailed();
     error ZeroAddress();
     error PositionTransferred();
+    error PositionAlreadyClaimed();
+    error BurnFailed();
+    error NotLapsed();
+    error BadPoolConfig();
 
     // ─── Constructor ──────────────────────────────────────────────────────────
 
@@ -207,6 +222,13 @@ contract EthosLiquidityManager is ReentrancyGuard {
         bool ethosIsToken0 = pos.token0 == ethosTokenAddr && pos.token1 == usdcTokenAddr;
         bool ethosIsToken1 = pos.token0 == usdcTokenAddr && pos.token1 == ethosTokenAddr;
         if (!ethosIsToken0 && !ethosIsToken1) revert WrongPool();
+        if (pos.fee != poolFee) revert WrongPool();
+
+        // One provider per position NFT: an NFT cannot be passed around to mint several badges.
+        address claimed = positionClaimedBy[positionTokenId];
+        if (claimed != address(0) && claimed != msg.sender && lpProviders[claimed].active) {
+            revert PositionAlreadyClaimed();
+        }
 
         // ── Step 3: Verify non-zero liquidity ─────────────────────────────────
         if (pos.liquidity == 0) revert InsufficientLiquidity();
@@ -221,172 +243,142 @@ contract EthosLiquidityManager is ReentrancyGuard {
         lp.registeredAt = block.timestamp;
         lp.lastBurnAt = block.timestamp;
         lp.active = true;
+        positionClaimedBy[positionTokenId] = msg.sender;
 
         totalLPProviders++;
 
-        // ── Mint Gold LP NFT badge directly to provider's wallet ──────────────
+        // ── Gold LP tier on the provider's (soulbound) badge; never blocks registration ──
         if (address(mvpBadge) != address(0)) {
-            if (mvpBadge.hasBadge(msg.sender)) {
-                mvpBadge.upgradeBadge(msg.sender);
-            } else {
-                mvpBadge.mintBadge(msg.sender, TIER_LP);
-            }
-            emit BadgeMinted(msg.sender, TIER_LP);
+            (bool ok,) = address(mvpBadge).call(abi.encodeCall(IEthosMVPBadge.mintBadge, (msg.sender, TIER_LP)));
+            if (ok) emit BadgeMinted(msg.sender, TIER_LP);
         }
 
         emit LPRegistered(msg.sender, positionTokenId, usdcValue);
     }
 
-    /**
-     * @notice Remove LP position and revoke Gold badge.
-     * @dev Re-verifies NFT ownership at removal time to prevent
-     * transfer-and-claim attacks (register NFT, transfer NFT to alt wallet,
-     * then call removeLP on the original wallet to free it for re-registration).
-     */
+    /// @notice Voluntarily leave the LP programme and drop the Gold tier.
     function removeLP() external nonReentrant {
-        LPInfo storage lp = lpProviders[msg.sender];
-        if (!lp.active) revert NotRegistered();
-
-        // Re-verify NFT is still owned by the caller
-        // If they transferred the NFT away, they can still remove but we flag it
-        address currentOwner = positionManager.ownerOf(lp.positionTokenId);
-        if (currentOwner != msg.sender) {
-            // NFT was transferred — position is still deregistered to prevent abuse
-            // but we emit an event for transparency
-            emit LPRemoved(msg.sender, lp.positionTokenId);
-        } else {
-            emit LPRemoved(msg.sender, lp.positionTokenId);
-        }
-
-        // [MED-1] Effects before interactions
-        lp.active = false;
-        totalLPProviders--;
-
-        // Revoke Gold NFT badge
-        if (address(mvpBadge) != address(0) && mvpBadge.hasBadge(msg.sender)) {
-            mvpBadge.revokeBadge(msg.sender);
-            emit BadgeRevoked(msg.sender);
-        }
+        if (!lpProviders[msg.sender].active) revert NotRegistered();
+        _deactivate(msg.sender);
     }
 
     /**
-     * @notice Execute monthly burn for LP provider (100 $ETHOS burned).
-     * @dev [CRIT-2] Only callable by the provider themselves or the owner.
-     * [MED-1] State updated before external call.
+     * @notice Anyone may end a registration that no longer qualifies: the position was emptied or moved
+     * to another wallet, or the monthly burn was missed past the grace period. This keeps Gold badges honest
+     * without trusting the owner to police them.
+     */
+    function deactivateIfInvalid(address provider) external nonReentrant {
+        LPInfo storage lp = lpProviders[provider];
+        if (!lp.active) revert NotRegistered();
+        bool lapsed = block.timestamp > lp.lastBurnAt + BURN_INTERVAL + BURN_GRACE;
+        if (!lapsed && _positionStillValid(provider, lp.positionTokenId)) revert NotLapsed();
+        _deactivate(provider);
+    }
+
+    /**
+     * @notice Execute monthly burn for an LP provider (100 $ETHOS).
+     * @dev Only the provider or the owner may call. The token additionally requires the provider's
+     * allowance for this contract, so a burn is always something the provider consented to.
      */
     function executeMonthlyBurn(address provider) external nonReentrant {
         if (msg.sender != provider && msg.sender != owner) revert NotAuthorized();
-
         LPInfo storage lp = lpProviders[provider];
         if (!lp.active) revert NotRegistered();
         if (block.timestamp < lp.lastBurnAt + BURN_INTERVAL) revert BurnIntervalNotMet();
 
-        // [MED-1] Effects before interaction
-        lp.lastBurnAt = block.timestamp;
-        lp.totalBurned += MONTHLY_BURN;
-
-        // Re-verify the LP position still has liquidity before burning
-        INonfungiblePositionManager.Position memory pos = positionManager.positions(lp.positionTokenId);
-        if (pos.liquidity == 0) {
-            // Position is empty — auto-remove
-            lp.active = false;
-            totalLPProviders--;
-            if (address(mvpBadge) != address(0) && mvpBadge.hasBadge(provider)) {
-                mvpBadge.revokeBadge(provider);
-                emit BadgeRevoked(provider);
-            }
-            emit LPRemoved(provider, lp.positionTokenId);
+        if (!_positionStillValid(provider, lp.positionTokenId)) {
+            _deactivate(provider);
             return;
         }
-
-        ethosToken.burnSubscriptionFee(provider);
-        emit LPBurnExecuted(provider, MONTHLY_BURN);
+        if (!_burn(provider, lp)) revert BurnFailed();
     }
 
-    /**
-     * @notice Batch execute monthly burns.
-     * @dev Only processes providers where the caller is the provider or owner.
-     */
+    /// @notice Batch burns; a provider whose burn fails is skipped (never blocks the others).
     function batchExecuteBurns(address[] calldata providers) external nonReentrant {
         for (uint256 i = 0; i < providers.length; i++) {
             address provider = providers[i];
             if (msg.sender != provider && msg.sender != owner) continue;
-
             LPInfo storage lp = lpProviders[provider];
             if (!lp.active || block.timestamp < lp.lastBurnAt + BURN_INTERVAL) continue;
+            if (!_positionStillValid(provider, lp.positionTokenId)) {
+                _deactivate(provider);
+                continue;
+            }
+            _burn(provider, lp);
+        }
+    }
 
+    function _burn(address provider, LPInfo storage lp) internal returns (bool) {
+        try ethosToken.burnSubscriptionFee(provider) {
             lp.lastBurnAt = block.timestamp;
             lp.totalBurned += MONTHLY_BURN;
-
-            ethosToken.burnSubscriptionFee(provider);
             emit LPBurnExecuted(provider, MONTHLY_BURN);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    function _positionStillValid(address provider, uint256 tokenId) internal view returns (bool) {
+        try positionManager.ownerOf(tokenId) returns (address o) {
+            if (o != provider) return false;
+        } catch {
+            return false;
+        }
+        try positionManager.positions(tokenId) returns (INonfungiblePositionManager.Position memory pos) {
+            return pos.liquidity != 0;
+        } catch {
+            return false;
+        }
+    }
+
+    function _deactivate(address provider) internal {
+        LPInfo storage lp = lpProviders[provider];
+        lp.active = false;
+        totalLPProviders--;
+        if (positionClaimedBy[lp.positionTokenId] == provider) delete positionClaimedBy[lp.positionTokenId];
+        emit LPRemoved(provider, lp.positionTokenId);
+        if (address(mvpBadge) != address(0)) {
+            (bool ok,) = address(mvpBadge).call(abi.encodeCall(IEthosMVPBadge.revokeBadge, (provider, TIER_LP)));
+            if (ok) emit BadgeRevoked(provider);
         }
     }
 
     // ─── Internal: compute USDC value of position ────────────────────────────
 
     /**
-     * @dev Estimates the USDC value of a Uniswap V3 position using the current
-     * pool price (sqrtPriceX96). This is an approximation — it uses the
-     *      current tick midpoint and the position's liquidity to estimate token amounts.
-     *
-     * For positions that are fully in range, this is accurate.
-     * For out-of-range positions (liquidity == 0), we already revert above.
-     *
-     * We use the simpler token amounts approach: for a position with active
-     * liquidity, the USDC portion (either token0 or token1) must be >= MIN_LP_USD_VALUE.
-     * We read tokensOwed as a proxy for minimum USDC contributed.
-     *
-     *      Production note: For a more precise calculation, integrate with Uniswap's
-     * LiquidityAmounts library. The minimum approach here is intentionally
-     * conservative — it ensures the position has at minimum $500 USDC exposure
-     * without requiring complex sqrt math.
+     * @dev USD value of a position, using real Uniswap V3 math at the pool's 30-minute TWAP price.
+     * Token amounts come from liquidity and the position's tick range; the ETHOS side is converted to USDC at
+     * the same TWAP price. A spot price (slot0) is never used: it can be moved inside one transaction.
+     * Reverts if the pool has no 30-minute observation history yet (fail closed).
      */
     function _computeUsdcValue(INonfungiblePositionManager.Position memory pos, bool ethosIsToken0)
         internal
         view
         returns (uint256 usdcValue)
     {
-        // Get current pool price
-        (uint160 sqrtPriceX96,,,,,,) = IUniswapV3Pool(ethosUsdcPool).slot0();
-
-        // Price = (sqrtPriceX96 / 2^96)^2
-        // token1 per token0 = sqrtPriceX96^2 / 2^192
-        uint256 sqrtPrice = uint256(sqrtPriceX96);
-
-        // Estimate token amounts from liquidity using current price
-        // For an in-range position: amount0 ≈ liquidity * (sqrtHi - sqrtCurrent) / (sqrtCurrent * sqrtHi)
-        // For simplicity and safety, we use the USDC owed (floor) plus a proportion of liquidity
-        // This is a conservative lower bound — always less than actual value
-
-        // USDC owed directly (fees accumulated)
-        uint256 usdcOwed = ethosIsToken0 ? pos.tokensOwed1 : pos.tokensOwed0;
-
-        // Estimate USDC from liquidity using current sqrt price
-        // amount_usdc ≈ liquidity / sqrtPrice * 2^96
-        // To avoid overflow: divide liquidity by (sqrtPriceX96 >> 48) then scale
-        uint256 liquidityUsdc = 0;
-        if (sqrtPriceX96 > 0) {
-            // Conservative estimate: liquidity * 2^48 / (sqrtPriceX96 >> 48)
-            uint256 scaledLiquidity = uint256(pos.liquidity) * (1 << 48);
-            uint256 scaledPrice = sqrtPriceX96 >> 48;
-            if (scaledPrice > 0) {
-                liquidityUsdc = scaledLiquidity / scaledPrice;
-                // Scale from 18-decimal ETH-equivalent to 6-decimal USDC
-                // This is a rough conversion — refine with LiquidityAmounts in production
-                if (!ethosIsToken0) {
-                    // USDC is token0, $ETHOS is token1
-                    // amount_usdc = liquidity * sqrtPrice / 2^96
-                    liquidityUsdc = (uint256(pos.liquidity) * sqrtPrice) >> 96;
-                }
-                // Cap at reasonable value to prevent overflow manipulation
-                if (liquidityUsdc > type(uint128).max) liquidityUsdc = 0;
-                // Convert from 18 decimals to 6 decimals (USDC)
-                liquidityUsdc = liquidityUsdc / 1e12;
-            }
+        uint160 sqrtP = V3Math.getSqrtRatioAtTick(_twapTick());
+        (uint256 amount0, uint256 amount1) = V3Math.getAmountsForLiquidity(
+            sqrtP, V3Math.getSqrtRatioAtTick(pos.tickLower), V3Math.getSqrtRatioAtTick(pos.tickUpper), pos.liquidity
+        );
+        if (ethosIsToken0) {
+            // token1 = USDC; convert token0 (ETHOS) to USDC
+            usdcValue = amount1 + V3Math.token0ToToken1(amount0, sqrtP);
+        } else {
+            // token0 = USDC; convert token1 (ETHOS) to USDC
+            usdcValue = amount0 + V3Math.token1ToToken0(amount1, sqrtP);
         }
+    }
 
-        usdcValue = usdcOwed + liquidityUsdc;
+    function _twapTick() internal view returns (int24) {
+        uint32[] memory ago = new uint32[](2);
+        ago[0] = TWAP_WINDOW;
+        ago[1] = 0;
+        (int56[] memory cum,) = IUniswapV3Pool(ethosUsdcPool).observe(ago);
+        int56 delta = cum[1] - cum[0];
+        int56 tick = delta / int56(uint56(TWAP_WINDOW));
+        if (delta < 0 && (delta % int56(uint56(TWAP_WINDOW)) != 0)) tick--; // round toward -infinity
+        return int24(tick);
     }
 
     // ─── Owner configuration ──────────────────────────────────────────────────
@@ -399,7 +391,15 @@ contract EthosLiquidityManager is ReentrancyGuard {
         external
         onlyOwner
     {
-        if (_positionManager == address(0) || _pool == address(0) || _ethosToken == address(0) || _usdc == address(0)) revert ZeroAddress();
+        if (_positionManager == address(0) || _pool == address(0) || _ethosToken == address(0) || _usdc == address(0)) {
+            revert ZeroAddress();
+        }
+        if (_ethosToken != address(ethosToken)) revert BadPoolConfig();
+        // The pool must really be an ETHOS/USDC pool (either order); its fee tier becomes the only accepted tier.
+        address t0 = IUniswapV3Pool(_pool).token0();
+        address t1 = IUniswapV3Pool(_pool).token1();
+        if (!((t0 == _ethosToken && t1 == _usdc) || (t0 == _usdc && t1 == _ethosToken))) revert BadPoolConfig();
+        poolFee = IUniswapV3Pool(_pool).fee();
         positionManager = INonfungiblePositionManager(_positionManager);
         ethosUsdcPool = _pool;
         ethosTokenAddr = _ethosToken;
@@ -408,6 +408,7 @@ contract EthosLiquidityManager is ReentrancyGuard {
     }
 
     function setMVPBadge(address _mvpBadge) external onlyOwner {
+        if (_mvpBadge != address(0) && _mvpBadge.code.length == 0) revert ZeroAddress();
         mvpBadge = IEthosMVPBadge(_mvpBadge);
     }
 
@@ -488,6 +489,15 @@ contract EthosLiquidityManager is ReentrancyGuard {
             return (false, "Position is not in the EthosiFi ETHOS/USDC pool", 0);
         }
 
+        if (pos.fee != poolFee) {
+            return (false, "Position is in a different fee tier", 0);
+        }
+        if (
+            positionClaimedBy[positionTokenId] != address(0) && positionClaimedBy[positionTokenId] != msg.sender
+                && lpProviders[positionClaimedBy[positionTokenId]].active
+        ) {
+            return (false, "Position already registered by another wallet", 0);
+        }
         if (pos.liquidity == 0) {
             return (false, "Position has zero liquidity", 0);
         }

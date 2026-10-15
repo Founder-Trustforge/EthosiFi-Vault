@@ -106,7 +106,7 @@ The vault is a standard ERC-4337 v0.7 / ERC-7579 smart account (rhinestone `MSAA
 * Validation uses `block.timestamp`-free logic but touches EntryPoint deposit/transient storage; run your own
   bundler (or stake the entities) before relying on public ERC-7562 mempools.
 * `PlainEnglishExecutor`, `AIThreatOracle`, `DeepfakeGuard` are **experimental and not allow-listed** by the
-  factory; `PaymasterManager` is not a real ERC-4337 paymaster yet. Do not rely on them.
+  factory; `experimental/PaymasterManager.sol` (moved out of `src/`) is not a real ERC-4337 paymaster yet. Do not rely on them.
 * Requires the EIP-7951/RIP-7212 P-256 precompile at `0x100` (Sepolia: yes since Fusaka; fail-closed otherwise).
 * Not externally audited. Do not use with real funds.
 
@@ -149,7 +149,7 @@ UserOp ─▶ EntryPoint ─▶ account.validateUserOp ─▶ validator chosen b
 
 ### Experimental (not allow-listed)
 
-`PlainEnglishExecutor`, `AIThreatOracle`, `DeepfakeGuard`, `PaymasterManager` — see limitations above.
+`PlainEnglishExecutor`, `AIThreatOracle`, `DeepfakeGuard` (in `src/`) and `experimental/PaymasterManager.sol` — see limitations above.
 
 ---
 
@@ -271,10 +271,33 @@ forge verify-contract <ADDRESS> TimeLockValidator \
 cd integration-tests && npm install && npm run build && npm test
 ```
 
-The suite deploys the factory and creates vaults through it, then drives real ERC-4337 `handleOps` flows:
-passkey and spending-key sends, budget/drip-drain limits, delayed tx + fingerprint release + 48h expiry,
-guardian recovery, every policy hook, a calldata-mutation fuzz of the router, reentrancy, and a set of
-attacker scenarios (see `integration-tests/suite.js`). `forge test` unit tests are not yet written.
+Three suites run with `npm test`:
+
+* `suite.js` (40 tests) deploys the factory and creates vaults through it, then drives real ERC-4337 `handleOps`
+  flows: passkey and spending-key sends, budget/drip-drain limits, delayed tx + fingerprint release + 48h expiry,
+  guardian recovery, every policy hook, a calldata-mutation fuzz of the router, reentrancy and attacker scenarios.
+* `suite_token.js` (19 tests): `$ETHOS` token, badge, staking, governance and the LP manager with a mock Uniswap V3
+  pool, including a check of the tick/liquidity math against a high-precision reference.
+* `suite_offchain.js` (8 tests): the phone-enrollment service logic against the real `BiometricValidator`
+  with a real passkey assertion.
+
+`forge test` only covers the pure V3 math (`test/`); the end-to-end suites above are the real coverage.
+CI runs both. Nothing here replaces an external audit.
+
+## Token suite notes
+
+* `$ETHOS` burns from someone else's balance now need that holder's allowance (subscription burns require the
+  provider to `approve` the burner for at least the fee). `distributePool` lets the owner release the 50M tokens
+  the contract holds (rewards pool + unvested team half); the owner SHOULD be a multisig.
+* Badge is a single soulbound token with per-source tiers (staking = MVP, LP = Gold). Losing one source keeps the other.
+  Badge calls never block staking or unstaking, even if the badge contract is replaced or broken.
+* Governance votes only count stake that existed before the proposal (`votingPowerSince`), voting closes strictly at
+  `endTime`, and a passed proposal must be executed within 14 days of its timelock. The owner can still cancel active
+  proposals and edit the target/selector whitelist: that is a deliberate trust anchor until governance owns itself.
+* LP positions are valued with real Uniswap V3 math at the pool's 30-minute TWAP (never spot), one provider per
+  position NFT, only the configured fee tier. A position that moves, empties, or misses its monthly burn past a 7-day
+  grace can be deactivated by anyone. The pool needs >= 30 min of observation history; registration fails closed before.
+* Deploy with `forge script script/DeployToken.s.sol` (wires everything), then transfer every `owner` to a multisig.
 
 ---
 

@@ -6,6 +6,14 @@
 3. Confirm page reads the transfer from chain, user scans fingerprint (WebAuthn, enrolled passkey) -> `confirmAndRelease` verifies it on-chain -> funds move.
 4. No valid fingerprint within 48h -> `confirmAndRelease` reverts "Expired"; anyone may call `expireTx` to mark it cancelled.
 
+## Adding a phone number (`phone-enroll`)
+A number is only ever added after (1) the owner's FINGERPRINT signs a server-issued challenge (verified on-chain by
+`BiometricValidator.verifyConfirmation`), then (2) the owner types an SMS one-time code, and it starts alerting after
+72 hours. Removal needs only the fingerprint. Limits: 5 numbers per vault, 10 challenges/day per vault, 5/day and 3 SMS/day
+per number, 5 code tries per challenge. Client helpers: `frontend/enroll-phone.js`. Secrets: RPC_URL, BIOMETRIC_ADDRESS,
+CHAIN_ID, ENROLL_PEPPER, TWILIO_*. Deploy: `supabase functions deploy phone-enroll --no-verify-jwt` (public by design;
+every action is authenticated by the passkey).
+
 ## Notes (v2 vault)
 - Spending-key ops are paid from the account's EntryPoint deposit (the "gas tank"); fund it with `createVault{value}` or `EntryPoint.depositTo(account)`, or the key cannot send.
 - The confirm page must pass the challenge from `TimeLockValidator.confirmationChallenge(account, txHash)` to the passkey. SMS is a notification only; it grants nothing.

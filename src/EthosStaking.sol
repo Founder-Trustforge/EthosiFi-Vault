@@ -12,7 +12,7 @@ interface IEthosToken {
 
 interface IEthosMVPBadge {
     function mintBadge(address to, uint8 tier) external;
-    function revokeBadge(address from) external;
+    function revokeBadge(address from, uint8 tier) external;
     function hasBadge(address account) external view returns (bool);
 }
 
@@ -60,6 +60,9 @@ contract EthosStaking is ReentrancyGuard {
         uint256 unstakeRequestAt;
         bool mvpActive;
         uint256 governanceVotes;
+        /// @dev Last time voting power was gained (stake / top-up). Governance only counts a vote on
+        ///      proposals created AFTER this moment, so borrowed or just-added stake cannot swing a live vote.
+        uint256 powerSince;
     }
 
     mapping(address => StakeInfo) public stakes;
@@ -83,6 +86,7 @@ contract EthosStaking is ReentrancyGuard {
     error NotAuthorized();
     error InsufficientStake();
     error AlreadyStaked();
+    error UnstakeAlreadyRequested();
     error NoStake();
     error CooldownNotMet();
     error UnstakeNotRequested();
@@ -117,6 +121,7 @@ contract EthosStaking is ReentrancyGuard {
 
         s.amount = amount;
         s.stakedAt = block.timestamp;
+        s.powerSince = block.timestamp;
         s.lastBurnAt = block.timestamp;
         s.mvpActive = true;
         s.governanceVotes = amount / (1000 * 1e18);
@@ -124,23 +129,45 @@ contract EthosStaking is ReentrancyGuard {
         totalStaked += amount;
         totalStakers++;
 
-        if (address(mvpBadge) != address(0)) {
-            mvpBadge.mintBadge(msg.sender, TIER_MVP);
-        }
+        _tryMint(msg.sender);
 
         emit Staked(msg.sender, amount, true);
         emit MVPActivated(msg.sender);
     }
 
+    /// @notice Add to an existing stake (e.g. to climb back over the MVP threshold after monthly burns).
+    function topUp(uint256 amount) external nonReentrant {
+        if (amount == 0) revert InsufficientStake();
+        StakeInfo storage s = stakes[msg.sender];
+        if (s.amount == 0) revert NoStake();
+        if (s.unstakeRequestAt != 0) revert UnstakeAlreadyRequested();
+
+        bool ok = ethosToken.transferFrom(msg.sender, address(this), amount);
+        if (!ok) revert TransferFailed();
+
+        s.amount += amount;
+        totalStaked += amount;
+        s.governanceVotes = s.amount / (1000 * 1e18);
+        s.powerSince = block.timestamp;
+
+        if (!s.mvpActive && s.amount >= MVP_STAKE_REQUIREMENT) {
+            s.mvpActive = true;
+            _tryMint(msg.sender);
+            emit MVPActivated(msg.sender);
+        }
+        emit Staked(msg.sender, amount, s.mvpActive);
+    }
+
     function requestUnstake() external nonReentrant {
         StakeInfo storage s = stakes[msg.sender];
         if (s.amount == 0) revert NoStake();
+        if (s.unstakeRequestAt != 0) revert UnstakeAlreadyRequested();
 
         s.unstakeRequestAt = block.timestamp;
 
         if (s.mvpActive) {
             s.mvpActive = false;
-            if (address(mvpBadge) != address(0)) mvpBadge.revokeBadge(msg.sender);
+            _tryRevoke(msg.sender);
             emit MVPRevoked(msg.sender);
         }
 
@@ -193,7 +220,7 @@ contract EthosStaking is ReentrancyGuard {
 
             if (s.amount < MVP_STAKE_REQUIREMENT && s.mvpActive) {
                 s.mvpActive = false;
-                if (address(mvpBadge) != address(0)) mvpBadge.revokeBadge(staker);
+                _tryRevoke(staker);
                 emit MVPRevoked(staker);
             }
 
@@ -202,10 +229,29 @@ contract EthosStaking is ReentrancyGuard {
         }
     }
 
+    // ─── Badge hooks (best-effort) ────────────────────────────────────────────
+
+    /// @dev The badge is a cosmetic mirror of stake status. A misconfigured, replaced or malicious badge
+    /// contract must never be able to block staking, unstaking or the burn, so failures are swallowed.
+    function _tryMint(address to) internal {
+        if (address(mvpBadge) == address(0)) return;
+        // low-level call: a non-contract badge address must not revert either (try/catch would, via extcodesize)
+        address(mvpBadge).call(abi.encodeCall(IEthosMVPBadge.mintBadge, (to, TIER_MVP)));
+    }
+
+    function _tryRevoke(address from) internal {
+        if (address(mvpBadge) == address(0)) return;
+        address(mvpBadge).call(abi.encodeCall(IEthosMVPBadge.revokeBadge, (from, TIER_MVP)));
+    }
+
     // ─── View ─────────────────────────────────────────────────────────────────
 
     function isMVP(address account) external view returns (bool) {
         return stakes[account].mvpActive && stakes[account].amount >= MVP_STAKE_REQUIREMENT;
+    }
+
+    function votingPowerSince(address account) external view returns (uint256) {
+        return stakes[account].powerSince;
     }
 
     function getGovernanceVotes(address account) external view returns (uint256) {
@@ -238,6 +284,7 @@ contract EthosStaking is ReentrancyGuard {
     // ─── Owner ────────────────────────────────────────────────────────────────
 
     function setMVPBadge(address _mvpBadge) external onlyOwner {
+        if (_mvpBadge != address(0) && _mvpBadge.code.length == 0) revert ZeroAddress();
         mvpBadge = IEthosMVPBadge(_mvpBadge);
     }
 

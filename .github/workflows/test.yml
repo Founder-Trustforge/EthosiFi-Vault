@@ -25,6 +25,11 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
+      # erc7579-implementation imports @openzeppelin and @rhinestone/sentinellist from its node_modules
+      - name: Install Solidity dependencies
+        run: npm install --no-audit --no-fund --ignore-scripts
+        working-directory: lib/erc7579-implementation
+
       - name: Show Forge version
         run: forge --version
 
@@ -36,3 +41,30 @@ jobs:
 
       - name: Run Forge tests
         run: forge test -vvv
+
+  integration:
+    name: End-to-end tests (EntryPoint + account + modules)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install test dependencies
+        run: bash setup.sh
+        working-directory: integration-tests
+
+      - name: Build
+        run: npm run build
+        working-directory: integration-tests
+
+      - name: Run all suites
+        run: npm test
+        working-directory: integration-tests
