@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BSL-1.1
 pragma solidity ^0.8.23;
 
+import {RouterGated} from "./lib/RouterGated.sol";
 import {IModule} from "erc7579/interfaces/IERC7579Module.sol";
 
 /**
@@ -13,8 +14,10 @@ import {IModule} from "erc7579/interfaces/IERC7579Module.sol";
  *
  * Layer: Core Security
  */
-contract EmergencyFreeze is IModule {
+contract EmergencyFreeze is IModule, RouterGated {
     uint256 constant MODULE_TYPE_HOOK = 4;
+
+    constructor(address router_) RouterGated(router_) {}
 
     struct FreezeConfig {
         bool initialized;
@@ -140,7 +143,12 @@ contract EmergencyFreeze is IModule {
     /**
      * @notice Pre-execution hook. Blocks ALL transactions when vault is frozen.
      */
-    function preCheck(address account, address, uint256, bytes calldata) external view returns (bytes memory) {
+    function preCheck(address account, address, uint256, bytes calldata)
+        external
+        view
+        onlyRouter
+        returns (bytes memory)
+    {
         FreezeConfig storage config = configs[account];
         if (!config.initialized) return "";
 

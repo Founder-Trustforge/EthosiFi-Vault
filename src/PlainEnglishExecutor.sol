@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BSL-1.1
 pragma solidity ^0.8.23;
 
+import {RouterGated} from "./lib/RouterGated.sol";
 import {IModule} from "erc7579/interfaces/IERC7579Module.sol";
 import {ReentrancyGuard} from "solady/utils/ReentrancyGuard.sol";
 
@@ -18,7 +19,7 @@ import {ReentrancyGuard} from "solady/utils/ReentrancyGuard.sol";
  * [MED-2] Two-step ownership added.
  * [MED-3] ReentrancyGuard applied.
  */
-contract PlainEnglishExecutor is IModule, ReentrancyGuard {
+contract PlainEnglishExecutor is IModule, ReentrancyGuard, RouterGated {
     uint256 private constant MODULE_TYPE_HOOK = 4;
     uint256 public constant CONFIRMATION_EXPIRY = 10 minutes;
     uint256 public constant BATCH_LABEL_LIMIT = 200;
@@ -95,7 +96,7 @@ contract PlainEnglishExecutor is IModule, ReentrancyGuard {
 
     // ─── Constructor ──────────────────────────────────────────────────────────
 
-    constructor() {
+    constructor(address router_) RouterGated(router_) {
         owner = msg.sender;
     }
 
@@ -109,6 +110,10 @@ contract PlainEnglishExecutor is IModule, ReentrancyGuard {
     function onInstall(bytes calldata data) external override {
         if (configs[msg.sender].initialized) revert ModuleAlreadyInitialized();
         (bool requireConfirmation, bool warnOnUnknown, bool blockOnUnknown) = abi.decode(data, (bool, bool, bool));
+        // On-chain "confirm first" cannot work inside a hook: the summary is written by the very
+        // call it would gate, and a revert rolls the write back, so every call would be refused
+        // forever (bricking the account). Confirmation is a client-side step; keep this off.
+        require(!requireConfirmation, "requireConfirmation unsupported");
         configs[msg.sender] = ExecutorConfig({
             initialized: true,
             requireConfirmation: requireConfirmation,
@@ -125,6 +130,7 @@ contract PlainEnglishExecutor is IModule, ReentrancyGuard {
 
     function preCheck(address account, address target, uint256 value, bytes calldata callData)
         external
+        onlyRouter
         nonReentrant
         returns (bytes memory)
     {
@@ -268,7 +274,6 @@ contract PlainEnglishExecutor is IModule, ReentrancyGuard {
                 )
             );
             risk = RiskLevel.LOW;
-
         } else if (selector == ERC20_APPROVE) {
             (, uint256 amount) = abi.decode(callData[4:], (address, uint256));
             bool unlimited = amount == type(uint256).max;
@@ -282,7 +287,6 @@ contract PlainEnglishExecutor is IModule, ReentrancyGuard {
                 )
             );
             risk = unlimited ? RiskLevel.HIGH : RiskLevel.MEDIUM;
-
         } else if (selector == ERC20_TRANSFER_FROM) {
             (address from,, uint256 amount) = abi.decode(callData[4:], (address, address, uint256));
             description = string(
@@ -297,7 +301,6 @@ contract PlainEnglishExecutor is IModule, ReentrancyGuard {
                 )
             );
             risk = RiskLevel.MEDIUM;
-
         } else if (selector == WETH_DEPOSIT) {
             description = string(
                 abi.encodePacked(
@@ -305,14 +308,12 @@ contract PlainEnglishExecutor is IModule, ReentrancyGuard {
                 )
             );
             risk = RiskLevel.LOW;
-
         } else if (selector == WETH_WITHDRAW) {
             (uint256 amount) = abi.decode(callData[4:], (uint256));
             description = string(
                 abi.encodePacked("UNWRAP ETH: Converting ", _uintToString(amount), " WETH back to ETH. Reversible.")
             );
             risk = RiskLevel.LOW;
-
         } else {
             description = string(
                 abi.encodePacked(

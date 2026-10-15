@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: BSL-1.1
 pragma solidity ^0.8.23;
+import {RouterGated} from "./lib/RouterGated.sol";
 import {PackedUserOperation} from "account-abstraction/interfaces/PackedUserOperation.sol";
 
 import {IModule} from "erc7579/interfaces/IERC7579Module.sol";
@@ -24,7 +25,7 @@ import {IModule} from "erc7579/interfaces/IERC7579Module.sol";
  *
  * Layer: User Protection (Pillar 2)
  */
-contract AntiScamScreener is IModule {
+contract AntiScamScreener is IModule, RouterGated {
     uint256 constant MODULE_TYPE_HOOK = 4;
 
     // [CRIT FIXED] registerThreat/batchRegisterThreats/removeThreat below were
@@ -44,7 +45,7 @@ contract AntiScamScreener is IModule {
         _;
     }
 
-    constructor() {
+    constructor(address router_) RouterGated(router_) {
         owner = msg.sender;
     }
 
@@ -122,73 +123,63 @@ contract AntiScamScreener is IModule {
     // ─────────────────────────────────────────────
 
     /**
-     * @notice Pre-execution hook. Screens the target address before any transaction.
+     * @notice Pre-execution hook (called by the account's EthosiHookRouter for EVERY inner call).
+     * Screens the call target AND the address argument of transfer / approve / transferFrom /
+     * setApprovalForAll calls (the classic drainer patterns), so sending tokens to - or approving -
+     * a flagged address is blocked even though the call target is a harmless token contract.
      */
-    function preCheck(address account, address target, uint256, bytes calldata callData)
+    function preCheck(address account, address target, uint256, bytes memory callData)
         external
+        view
+        onlyRouter
         returns (bytes memory)
     {
-        totalScreened++;
-
         ScreenerConfig storage config = configs[account];
         if (!config.initialized) return "";
 
-        // User whitelist bypass (for false positives)
-        if (config.userWhitelist[target]) return "";
+        _screen(config, account, target);
 
-        ThreatEntry storage threat = threatRegistry[target];
-
-        if (!threat.active || threat.level == ThreatLevel.SAFE) return "";
-
-        // Also screen any address in calldata (for ERC20 transfers to scam addresses)
         if (callData.length >= 36) {
-            address callTarget = address(bytes20(callData[16:36]));
-            if (callTarget != address(0) && !config.userWhitelist[callTarget]) {
-                ThreatEntry storage callThreat = threatRegistry[callTarget];
-                if (callThreat.active && uint8(callThreat.level) >= uint8(config.blockThreshold)) {
-                    totalBlocked++;
-                    emit TransactionBlocked(account, callTarget, callThreat.level, callThreat.reason);
-                    revert(
-                        string(
-                            abi.encodePacked(
-                                "EthosiFi AntiScam: BLOCKED. Recipient flagged as [",
-                                callThreat.reason,
-                                "]. Contact support@ethosifi.com if this is an error."
-                            )
-                        )
-                    );
+            bytes4 sel;
+            uint256 w1;
+            assembly {
+                sel := mload(add(callData, 32))
+                w1 := mload(add(callData, 36))
+            }
+            if (sel == 0xa9059cbb || sel == 0x095ea7b3 || sel == 0x39509351 || sel == 0xa22cb465) {
+                // transfer, approve, increaseAllowance, setApprovalForAll: first arg is the counterparty
+                _screen(config, account, address(uint160(w1)));
+            } else if (sel == 0x23b872dd && callData.length >= 68) {
+                // transferFrom(from, to, amount): screen `to`
+                uint256 w2;
+                assembly {
+                    w2 := mload(add(callData, 68))
                 }
+                _screen(config, account, address(uint160(w2)));
             }
         }
-
-        if (uint8(threat.level) >= uint8(config.blockThreshold)) {
-            // CRITICAL and HIGH: always block
-            if (threat.level == ThreatLevel.CRITICAL || threat.level == ThreatLevel.HIGH) {
-                totalBlocked++;
-                emit TransactionBlocked(account, target, threat.level, threat.reason);
-                revert(
-                    string(
-                        abi.encodePacked(
-                            "EthosiFi AntiScam: BLOCKED. Contract flagged as [",
-                            threat.reason,
-                            "]. This address is known malicious. Transaction cancelled."
-                        )
-                    )
-                );
-            }
-
-            // MEDIUM: block unless override allowed
-            if (threat.level == ThreatLevel.MEDIUM && !config.allowOverride) {
-                totalBlocked++;
-                emit TransactionBlocked(account, target, threat.level, threat.reason);
-                revert("EthosiFi AntiScam: BLOCKED. Medium threat detected. Enable override or contact support.");
-            }
-
-            // LOW or overridable MEDIUM: warn via event, allow
-            emit TransactionWarning(account, target, threat.level, threat.reason);
-        }
-
         return "";
+    }
+
+    function _screen(ScreenerConfig storage config, address account, address addr) internal view {
+        // never gate the account's own address: the registry owner must not be able to lock a vault
+        // out of its own module management
+        if (addr == address(0) || addr == account || config.userWhitelist[addr]) return;
+        ThreatEntry storage threat = threatRegistry[addr];
+        if (!threat.active || threat.level == ThreatLevel.SAFE) return;
+        if (uint8(threat.level) < uint8(config.blockThreshold)) return; // LOW etc.: allowed (UI warns)
+
+        // CRITICAL and HIGH: always block. MEDIUM: block unless the user enabled override.
+        if (threat.level == ThreatLevel.MEDIUM && config.allowOverride) return;
+        revert(
+            string(
+                abi.encodePacked(
+                    "EthosiFi AntiScam: BLOCKED. Address flagged as [",
+                    threat.reason,
+                    "]. Contact support@ethosifi.com if this is an error."
+                )
+            )
+        );
     }
 
     function postCheck(bytes calldata) external pure {}

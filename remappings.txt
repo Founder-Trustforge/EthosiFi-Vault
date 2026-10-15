@@ -4,3 +4,4 @@ forge-std/=lib/forge-std/src/
 solady/=lib/solady/src/
 @openzeppelin/=lib/erc7579-implementation/node_modules/@openzeppelin/
 sentinellist/=lib/erc7579-implementation/node_modules/@rhinestone/sentinellist/src/
+lib/erc7579-implementation/:src/=lib/erc7579-implementation/src/

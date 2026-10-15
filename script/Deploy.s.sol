@@ -2,6 +2,8 @@
 pragma solidity ^0.8.23;
 
 import "forge-std/Script.sol";
+import "../src/EthosiHookRouter.sol";
+import "../src/EthosiBootstrap.sol";
 import "../src/TimeLockValidator.sol";
 import "../src/BiometricValidator.sol";
 import "../src/GuardianValidator.sol";
@@ -12,8 +14,7 @@ import "../src/AntiScamScreener.sol";
 import "../src/PlainEnglishExecutor.sol";
 import "../src/AIThreatOracle.sol";
 import "../src/DeepfakeGuard.sol";
-import "../src/SeniorModeValidator.sol";
-import "../src/PaymasterManager.sol";
+import "../src/SeniorModeGuard.sol";
 import "../src/VaultFactory.sol";
 import {MSAAdvanced} from "erc7579/MSAAdvanced.sol";
 
@@ -21,8 +22,10 @@ contract DeployScript is Script {
     address constant ENTRY_POINT_V07 = 0x0000000071727De22E5E9d8BAf0edAc6f37da032;
 
     struct Addresses {
-        address timeLockValidator;
+        address router;
+        address bootstrap;
         address biometricValidator;
+        address timeLockValidator;
         address guardianValidator;
         address emergencyFreeze;
         address multiSigUpgradeGuard;
@@ -31,8 +34,7 @@ contract DeployScript is Script {
         address plainEnglishExecutor;
         address aiThreatOracle;
         address deepfakeGuard;
-        address seniorModeValidator;
-        address paymasterManager;
+        address seniorModeGuard;
         address accountImplementation;
         address vaultFactory;
     }
@@ -54,52 +56,47 @@ contract DeployScript is Script {
 
         Addresses memory addrs;
 
-        console.log("\n[1/4] Core Security...");
+        // The router is the account's single hook slot; policy modules only accept calls from it.
+        addrs.router = address(new EthosiHookRouter());
+        addrs.bootstrap = address(new EthosiBootstrap());
+
+        console.log("\n[1/3] Core security (authorities)...");
         addrs.biometricValidator = address(new BiometricValidator());
-        addrs.timeLockValidator = address(new TimeLockValidator(addrs.biometricValidator));
-        addrs.guardianValidator = address(new GuardianValidator());
-        addrs.emergencyFreeze = address(new EmergencyFreeze());
-        addrs.multiSigUpgradeGuard = address(new MultiSigUpgradeGuard());
+        addrs.timeLockValidator = address(new TimeLockValidator(addrs.biometricValidator, addrs.router, entryPoint));
+        addrs.guardianValidator = address(new GuardianValidator(addrs.biometricValidator));
 
-        console.log("\n[2/4] User Protection...");
-        addrs.poisonedAddressProtection = address(new PoisonedAddressProtection());
-        addrs.antiScamScreener = address(new AntiScamScreener());
-        addrs.plainEnglishExecutor = address(new PlainEnglishExecutor());
-        addrs.aiThreatOracle = address(new AIThreatOracle());
-        addrs.deepfakeGuard = address(new DeepfakeGuard());
+        console.log("\n[2/3] Policy hooks (behind the router)...");
+        addrs.emergencyFreeze = address(new EmergencyFreeze(addrs.router));
+        addrs.multiSigUpgradeGuard = address(new MultiSigUpgradeGuard(addrs.router));
+        addrs.poisonedAddressProtection = address(new PoisonedAddressProtection(addrs.router));
+        addrs.antiScamScreener = address(new AntiScamScreener(addrs.router));
+        addrs.plainEnglishExecutor = address(new PlainEnglishExecutor(addrs.router));
+        addrs.aiThreatOracle = address(new AIThreatOracle(addrs.router));
+        addrs.deepfakeGuard = address(new DeepfakeGuard(addrs.router));
+        addrs.seniorModeGuard = address(new SeniorModeGuard(addrs.router));
 
-        console.log("\n[3/4] UX & Accessibility...");
-        addrs.seniorModeValidator = address(new SeniorModeValidator());
-        // [FIXED] PaymasterManager's constructor requires the EntryPoint
-        // address; the script previously called `new PaymasterManager()`
-        // with no arguments, which no longer compiles against the fixed
-        // constructor and would have left the paymaster wired to the
-        // wrong (zero) EntryPoint had it somehow been force-compiled.
-        addrs.paymasterManager = address(new PaymasterManager(entryPoint));
-
-        console.log("\n[4/4] Infrastructure...");
-        // [FIXED] VaultFactory requires an `_accountImplementation` address
-        // that it uses as the EIP-1167 minimal-proxy target for every vault
-        // it clones via CREATE2. The script previously omitted this entirely.
-        // MSAAdvanced (erc7579-implementation's reference ERC-7579 account)
-        // is deployed here as that implementation/logic contract.
+        console.log("\n[3/3] Account implementation + factory...");
         addrs.accountImplementation = address(new MSAAdvanced());
-        VaultFactory factory = new VaultFactory(entryPoint, addrs.accountImplementation);
-        addrs.vaultFactory = address(factory);
-
-        factory.setModules(
-            addrs.timeLockValidator,
-            addrs.biometricValidator,
-            addrs.guardianValidator,
-            addrs.emergencyFreeze,
-            addrs.poisonedAddressProtection,
-            addrs.antiScamScreener,
-            addrs.plainEnglishExecutor,
-            addrs.aiThreatOracle,
-            addrs.deepfakeGuard,
-            addrs.multiSigUpgradeGuard,
-            addrs.paymasterManager,
-            addrs.seniorModeValidator
+        // Only the audited, tested policy hooks are selectable by users. PlainEnglishExecutor,
+        // AIThreatOracle and DeepfakeGuard are deployed for experimentation but NOT allow-listed:
+        // their on-chain semantics are not safe to rely on yet (see README).
+        address[] memory allowed = new address[](5);
+        allowed[0] = addrs.emergencyFreeze;
+        allowed[1] = addrs.multiSigUpgradeGuard;
+        allowed[2] = addrs.poisonedAddressProtection;
+        allowed[3] = addrs.antiScamScreener;
+        allowed[4] = addrs.seniorModeGuard;
+        addrs.vaultFactory = address(
+            new VaultFactory(
+                entryPoint,
+                addrs.accountImplementation,
+                addrs.bootstrap,
+                addrs.router,
+                addrs.biometricValidator,
+                addrs.timeLockValidator,
+                addrs.guardianValidator,
+                allowed
+            )
         );
 
         vm.stopBroadcast();
@@ -107,8 +104,10 @@ contract DeployScript is Script {
         console.log("\n====================================================");
         console.log("  DEPLOYMENT COMPLETE");
         console.log("====================================================");
-        console.log("  TIMELOCK_VALIDATOR=      ", addrs.timeLockValidator);
+        console.log("  HOOK_ROUTER=             ", addrs.router);
+        console.log("  BOOTSTRAP=               ", addrs.bootstrap);
         console.log("  BIOMETRIC_VALIDATOR=     ", addrs.biometricValidator);
+        console.log("  TIMELOCK_VALIDATOR=      ", addrs.timeLockValidator);
         console.log("  GUARDIAN_VALIDATOR=      ", addrs.guardianValidator);
         console.log("  EMERGENCY_FREEZE=        ", addrs.emergencyFreeze);
         console.log("  MULTISIG_UPGRADE_GUARD=  ", addrs.multiSigUpgradeGuard);
@@ -117,8 +116,7 @@ contract DeployScript is Script {
         console.log("  PLAIN_ENGLISH_EXECUTOR=  ", addrs.plainEnglishExecutor);
         console.log("  AI_THREAT_ORACLE=        ", addrs.aiThreatOracle);
         console.log("  DEEPFAKE_GUARD=          ", addrs.deepfakeGuard);
-        console.log("  SENIOR_MODE_VALIDATOR=   ", addrs.seniorModeValidator);
-        console.log("  PAYMASTER_MANAGER=       ", addrs.paymasterManager);
+        console.log("  SENIOR_MODE_GUARD=       ", addrs.seniorModeGuard);
         console.log("  ACCOUNT_IMPLEMENTATION=  ", addrs.accountImplementation);
         console.log("  VAULT_FACTORY=           ", addrs.vaultFactory);
         console.log("====================================================");

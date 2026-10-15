@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: BSL-1.1
 pragma solidity ^0.8.23;
 
-import {IValidator} from "erc7579/interfaces/IERC7579Module.sol";
-import {PackedUserOperation} from "account-abstraction/interfaces/PackedUserOperation.sol";
+import {IModule} from "erc7579/interfaces/IERC7579Module.sol";
+import {CallDecoder} from "./lib/CallDecoder.sol";
+import {RouterGated} from "./lib/RouterGated.sol";
 
 /**
  * @title PoisonedAddressProtection
@@ -22,16 +23,7 @@ import {PackedUserOperation} from "account-abstraction/interfaces/PackedUserOper
  *
  * Layer: User Protection (Pillar 1)
  */
-contract PoisonedAddressProtection is IValidator {
-    uint256 constant MODULE_TYPE_VALIDATOR = 1;
-    uint256 constant SIG_VALIDATION_SUCCESS = 0;
-    uint256 constant SIG_VALIDATION_FAILED = 1;
-
-    // [CRIT FIXED] flagPoisonedFingerprint/unflagFingerprint below were marked
-    // `onlyOwner`, but this contract never declared an owner or that modifier
-    // — a straight compile error, meaning this fix note was written but never
-    // actually applied. Adding real two-step ownership here, matching the
-    // pattern already used elsewhere in this codebase (e.g. AIThreatOracle).
+contract PoisonedAddressProtection is IModule, RouterGated {
     address public owner;
     address public pendingOwner;
 
@@ -43,7 +35,7 @@ contract PoisonedAddressProtection is IValidator {
         _;
     }
 
-    constructor() {
+    constructor(address router_) RouterGated(router_) {
         owner = msg.sender;
     }
 
@@ -60,54 +52,45 @@ contract PoisonedAddressProtection is IValidator {
         pendingOwner = address(0);
     }
 
-    uint256 public constant DEFAULT_THRESHOLD = 50 * 1e6; // $50 USDC — require verification above this
-    uint256 public constant CONFIRMATION_WINDOW = 15 minutes; // Pre-confirmed address valid for 15 min
-    uint256 public constant NEW_ADDRESS_DELAY = 5 minutes; // First-time recipients get extra delay
+    uint256 public constant DEFAULT_THRESHOLD = 50 * 1e6; // raw units: verify transfers at/above this
+    uint256 public constant CONFIRMATION_WINDOW = 15 minutes;
 
     struct ProtectionConfig {
         bool initialized;
-        bool strictMode; // True = verify ALL transfers regardless of amount
-        uint256 threshold; // Verify transfers above this amount
+        bool strictMode; // true = verify ALL transfers regardless of amount
+        uint256 threshold;
         uint256 confirmationWindow;
     }
 
     struct AddressRecord {
-        bool verified; // Explicitly verified by user
-        uint256 firstSeenAt; // When this address was first added
+        bool verified; // explicitly verified by the user
+        uint256 firstSeenAt;
         uint256 lastUsedAt;
         uint256 totalTransactions;
-        bytes32 fullAddressHash; // On-chain proof of full address
-    }
-
-    struct PendingConfirmation {
-        bytes32 fullAddressHash;
-        uint256 confirmedAt;
-        bool confirmed;
-        uint256 amount;
     }
 
     mapping(address => ProtectionConfig) public configs;
     mapping(address => mapping(address => AddressRecord)) public addressBook;
-    mapping(address => mapping(bytes32 => PendingConfirmation)) public pendingConfirmations;
+    /// @dev account => keccak(token, recipient, amount) => time the user confirmed the full address
+    mapping(address => mapping(bytes32 => uint256)) public confirmedAt;
 
-    // Poison registry: known lookalike address pairs
-    mapping(bytes8 => bool) public knownPoisonPrefixSuffix; // first4+last4 of known poisoned addresses
+    /// @dev first4+last4 bytes of known lookalike ("poisoned") addresses
+    mapping(bytes8 => bool) public knownPoisonPrefixSuffix;
 
     event AddressConfirmed(address indexed account, address indexed recipient, bytes32 transferId);
     event AddressVerified(address indexed account, address indexed recipient);
-    event AddressAddedToBook(address indexed account, address indexed recipient);
     event PoisoningAttemptBlocked(address indexed account, address indexed suspicious, bytes8 fingerprint);
     event FirstTimeRecipientWarning(address indexed account, address indexed recipient);
 
-    // ─────────────────────────────────────────────
-    // Module Lifecycle
-    // ─────────────────────────────────────────────
+    error PoisonedAddress(address recipient);
+    error ConfirmationRequired(address recipient, uint256 amount);
 
-    function onInstall(bytes calldata data) external {
-        require(!configs[msg.sender].initialized, "Already initialized");
+    // ─── Module lifecycle (msg.sender = account) ──────────────────────────────
 
+    /// @param data abi.encode(bool strictMode, uint256 threshold, uint256 confirmationWindow)
+    function onInstall(bytes calldata data) external override {
+        if (configs[msg.sender].initialized) revert AlreadyInitialized(msg.sender);
         (bool strictMode, uint256 customThreshold, uint256 customWindow) = abi.decode(data, (bool, uint256, uint256));
-
         configs[msg.sender] = ProtectionConfig({
             initialized: true,
             strictMode: strictMode,
@@ -116,119 +99,93 @@ contract PoisonedAddressProtection is IValidator {
         });
     }
 
-    function onUninstall(bytes calldata) external {
+    function onUninstall(bytes calldata) external override {
         delete configs[msg.sender];
     }
 
-    // ─────────────────────────────────────────────
-    // Core Validation
-    // ─────────────────────────────────────────────
-
-    // [FIXED] IValidator.validateUserOp takes exactly (userOp, userOpHash) —
-    // the extra trailing uint256 here didn't match the interface, so this
-    // never actually implemented IValidator ("should be marked as abstract").
-    function validateUserOp(PackedUserOperation calldata userOp, bytes32 userOpHash)
-        external
-        override
-        returns (uint256)
-    {
-        ProtectionConfig storage config = configs[msg.sender];
-        if (!config.initialized) return SIG_VALIDATION_SUCCESS;
-
-        (address recipient, uint256 amount) = _decodeRecipient(userOp.callData);
-        if (recipient == address(0)) return SIG_VALIDATION_SUCCESS;
-
-        AddressRecord storage record = addressBook[msg.sender][recipient];
-
-        // Verified address in personal book — allow immediately
-        if (record.verified) return SIG_VALIDATION_SUCCESS;
-
-        // Below threshold and not strict mode — allow
-        if (!config.strictMode && amount < config.threshold) return SIG_VALIDATION_SUCCESS;
-
-        // Require pre-confirmation
-        bytes32 transferId =
-            keccak256(abi.encodePacked(msg.sender, recipient, amount, block.timestamp / config.confirmationWindow));
-        PendingConfirmation storage pending = pendingConfirmations[msg.sender][transferId];
-
-        if (!pending.confirmed) return SIG_VALIDATION_FAILED;
-        if (block.timestamp > pending.confirmedAt + config.confirmationWindow) return SIG_VALIDATION_FAILED;
-        if (pending.fullAddressHash != keccak256(abi.encodePacked(recipient))) return SIG_VALIDATION_FAILED;
-        if (pending.amount != amount) return SIG_VALIDATION_FAILED;
-
-        return SIG_VALIDATION_SUCCESS;
+    function isModuleType(uint256) external pure override returns (bool) {
+        return false; // sub-hook of the router; not installed directly on accounts
     }
 
-    // ─────────────────────────────────────────────
-    // Full Address Confirmation (Frontend Must Call This)
-    // ─────────────────────────────────────────────
+    function isInitialized(address account) external view override returns (bool) {
+        return configs[account].initialized;
+    }
 
-    /**
-     * @notice REQUIRED before any unverified transfer.
-     * Frontend MUST display the COMPLETE address — no truncation.
-     * User must manually confirm every character matches their intent.
-     *
-     * @param recipient The full recipient address (all 42 characters / 20 bytes)
-     * @param amount The exact amount being transferred
-     */
-    function confirmFullAddress(address recipient, uint256 amount) external returns (bytes32 transferId) {
+    // ─── Sub-hook ─────────────────────────────────────────────────────────────
+
+    function preCheck(address account, address target, uint256 value, bytes memory callData)
+        external
+        onlyRouter
+        returns (bytes memory)
+    {
+        ProtectionConfig storage config = configs[account];
+        if (!config.initialized) return "";
+
+        CallDecoder.Transfer memory t = CallDecoder.classifyMem(target, value, callData);
+        if (t.kind == 0) return "";
+        address recipient = t.recipient;
+
+        AddressRecord storage record = addressBook[account][recipient];
+
+        // a lookalike of a known poisoned address is refused outright, even if "verified" earlier
+        bytes8 fp = _getFingerprint(recipient);
+        if (knownPoisonPrefixSuffix[fp]) {
+            emit PoisoningAttemptBlocked(account, recipient, fp);
+            revert PoisonedAddress(recipient);
+        }
+
+        if (record.verified) {
+            record.lastUsedAt = block.timestamp;
+            record.totalTransactions++;
+            return "";
+        }
+        if (!config.strictMode && t.amount < config.threshold) return "";
+
+        // needs a fresh, single-use confirmation of the FULL address + amount
+        bytes32 id = keccak256(abi.encode(t.token, recipient, t.amount));
+        uint256 at = confirmedAt[account][id];
+        if (at == 0 || block.timestamp > at + config.confirmationWindow) {
+            revert ConfirmationRequired(recipient, t.amount);
+        }
+        delete confirmedAt[account][id];
+        return "";
+    }
+
+    function postCheck(bytes calldata) external pure {}
+
+    // ─── Called BY THE ACCOUNT (msg.sender = account) ─────────────────────────
+
+    /// @notice Confirm the complete recipient address (the frontend must show all 42 characters)
+    /// before an unverified transfer. Valid once, for `confirmationWindow`.
+    function confirmFullAddress(address token, address recipient, uint256 amount) external returns (bytes32 id) {
         require(configs[msg.sender].initialized, "Not initialized");
         require(recipient != address(0), "Invalid recipient");
 
-        // Check for lookalike poisoning fingerprint
-        bytes8 fingerprint = _getFingerprint(recipient);
-        if (knownPoisonPrefixSuffix[fingerprint]) {
-            emit PoisoningAttemptBlocked(msg.sender, recipient, fingerprint);
-            revert("EthosiFi: This address matches a known poisoning pattern. Verify carefully.");
-        }
+        bytes8 fp = _getFingerprint(recipient);
+        if (knownPoisonPrefixSuffix[fp]) revert PoisonedAddress(recipient);
 
-        // Warn on first-time recipient
         AddressRecord storage record = addressBook[msg.sender][recipient];
         if (record.firstSeenAt == 0) {
             record.firstSeenAt = block.timestamp;
             emit FirstTimeRecipientWarning(msg.sender, recipient);
         }
 
-        transferId = keccak256(
-            abi.encodePacked(msg.sender, recipient, amount, block.timestamp / configs[msg.sender].confirmationWindow)
-        );
-
-        pendingConfirmations[msg.sender][transferId] = PendingConfirmation({
-            fullAddressHash: keccak256(abi.encodePacked(recipient)),
-            confirmedAt: block.timestamp,
-            confirmed: true,
-            amount: amount
-        });
-
-        emit AddressConfirmed(msg.sender, recipient, transferId);
+        id = keccak256(abi.encode(token, recipient, amount));
+        confirmedAt[msg.sender][id] = block.timestamp;
+        emit AddressConfirmed(msg.sender, recipient, id);
     }
 
-    // ─────────────────────────────────────────────
-    // Address Book Management
-    // ─────────────────────────────────────────────
-
-    /**
-     * @notice Verify and save a recipient to your personal address book.
-     * Once verified, no further confirmation needed for this address.
-     */
+    /// @notice Save a recipient to the personal address book: no further confirmation needed.
     function verifyAndSaveAddress(address recipient) external {
         require(configs[msg.sender].initialized, "Not initialized");
         require(recipient != address(0), "Invalid address");
-
-        // Block saving known poisoned addresses
-        bytes8 fingerprint = _getFingerprint(recipient);
-        if (knownPoisonPrefixSuffix[fingerprint]) {
-            emit PoisoningAttemptBlocked(msg.sender, recipient, fingerprint);
-            revert("EthosiFi: Cannot save a known poisoning address.");
-        }
+        bytes8 fp = _getFingerprint(recipient);
+        if (knownPoisonPrefixSuffix[fp]) revert PoisonedAddress(recipient);
 
         AddressRecord storage record = addressBook[msg.sender][recipient];
         record.verified = true;
-        record.firstSeenAt = record.firstSeenAt == 0 ? block.timestamp : record.firstSeenAt;
-        record.fullAddressHash = keccak256(abi.encodePacked(recipient));
-
+        if (record.firstSeenAt == 0) record.firstSeenAt = block.timestamp;
         emit AddressVerified(msg.sender, recipient);
-        emit AddressAddedToBook(msg.sender, recipient);
     }
 
     function removeFromAddressBook(address recipient) external {
@@ -236,24 +193,8 @@ contract PoisonedAddressProtection is IValidator {
         delete addressBook[msg.sender][recipient];
     }
 
-    function updateTransactionRecord(address account, address recipient) external {
-        AddressRecord storage record = addressBook[account][recipient];
-        if (record.firstSeenAt > 0) {
-            record.lastUsedAt = block.timestamp;
-            record.totalTransactions++;
-        }
-    }
+    // ─── Poison registry (owner = EthosiFi governance multisig) ───────────────
 
-    // ─────────────────────────────────────────────
-    // Poison Registry (Governance-controlled in production)
-    // ─────────────────────────────────────────────
-
-    /**
-     * @notice Add a known poisoned address fingerprint to the global registry.
-     * @dev In production: controlled by EthosiFi governance multisig.
-     * Fed by Chainalysis, on-chain indexers, and community reports.
-     */
-    // [CRIT-3 FIXED] onlyOwner — previously callable by anyone
     function flagPoisonedFingerprint(bytes8 fingerprint) external onlyOwner {
         knownPoisonPrefixSuffix[fingerprint] = true;
     }
@@ -262,30 +203,10 @@ contract PoisonedAddressProtection is IValidator {
         knownPoisonPrefixSuffix[fingerprint] = false;
     }
 
-    // ─────────────────────────────────────────────
-    // Internal Helpers
-    // ─────────────────────────────────────────────
-
-    /**
-     * @notice Extract the first 4 + last 4 bytes of an address as a fingerprint.
-     * This is how attackers craft lookalike addresses — we use it against them.
-     */
+    /// @dev first 4 + last 4 bytes of an address: how attackers grind lookalikes.
     function _getFingerprint(address addr) internal pure returns (bytes8) {
-        bytes20 addrBytes = bytes20(addr);
-        bytes4 prefix = bytes4(addrBytes); // First 4 bytes
-        bytes4 suffix = bytes4(uint32(uint160(addr))); // Last 4 bytes
-        return bytes8(bytes.concat(prefix, suffix));
+        return bytes8(bytes.concat(bytes4(bytes20(addr)), bytes4(uint32(uint160(addr)))));
     }
-
-    function _decodeRecipient(bytes calldata callData) internal pure returns (address recipient, uint256 amount) {
-        if (callData.length < 68) return (address(0), 0);
-        recipient = address(bytes20(callData[16:36]));
-        amount = uint256(bytes32(callData[36:68]));
-    }
-
-    // ─────────────────────────────────────────────
-    // View Helpers
-    // ─────────────────────────────────────────────
 
     function getAddressRecord(address account, address recipient)
         external
@@ -294,19 +215,5 @@ contract PoisonedAddressProtection is IValidator {
     {
         AddressRecord storage r = addressBook[account][recipient];
         return (r.verified, r.firstSeenAt, r.lastUsedAt, r.totalTransactions);
-    }
-
-    function isModuleType(uint256 moduleTypeId) external pure returns (bool) {
-        return moduleTypeId == MODULE_TYPE_VALIDATOR;
-    }
-
-    function isInitialized(address account) external view returns (bool) {
-        return configs[account].initialized;
-    }
-    // [CRIT-1 FIXED] Duplicate validateUserOp removed — it returned 0 unconditionally,
-    // bypassing all address-poisoning and confirmation checks.
-
-    function isValidSignatureWithSender(address, bytes32, bytes calldata) external pure returns (bytes4) {
-        return 0xffffffff;
     }
 }

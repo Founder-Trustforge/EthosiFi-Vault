@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: BSL-1.1
 pragma solidity ^0.8.23;
 
-import {IValidator} from "erc7579/interfaces/IERC7579Module.sol";
-import {PackedUserOperation} from "account-abstraction/interfaces/PackedUserOperation.sol";
+import {IModule} from "erc7579/interfaces/IERC7579Module.sol";
 import {ReentrancyGuard} from "solady/utils/ReentrancyGuard.sol";
-import {IERC7579Account, Execution} from "erc7579/interfaces/IERC7579Account.sol";
+import {IERC7579Account} from "erc7579/interfaces/IERC7579Account.sol";
 import {ModeLib} from "erc7579/lib/ModeLib.sol";
 
 /**
@@ -30,12 +29,20 @@ import {ModeLib} from "erc7579/lib/ModeLib.sol";
  * @dev BSL 1.1 — non-commercial use free; commercial license: founder@ethosifi.com
  * Converts to GPL-3.0 on 2029-01-01.
  */
-contract GuardianValidator is IValidator, ReentrancyGuard {
+contract GuardianValidator is IModule, ReentrancyGuard {
     // ─────────────────────────────────────────────────────────────
     // Constants
     // ─────────────────────────────────────────────────────────────
 
-    uint256 public constant MODULE_TYPE_VALIDATOR = 1;
+    uint256 public constant MODULE_TYPE_EXECUTOR = 2;
+
+    /// @notice BiometricValidator whose credentials this module is allowed to replace on recovery.
+    address public immutable biometricValidator;
+
+    constructor(address biometricValidator_) {
+        require(biometricValidator_ != address(0), "Zero validator");
+        biometricValidator = biometricValidator_;
+    }
 
     /// @notice Mandatory delay between recovery initiation and execution.
     uint256 public constant RECOVERY_DELAY = 48 hours;
@@ -63,9 +70,8 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
     }
 
     struct RecoveryRequest {
-        bytes32 newCredentialHash; // keccak256(credentialId ++ pubKey) to install
-        address newValidator; // address of the new validator module (optional)
-        bytes newValidatorData; // install data for the new validator module
+        bytes32 newCredentialId; // new passkey credential id
+        uint256[2] newPubKey; // new passkey P-256 public key (x, y)
         uint256 initiatedAt;
         uint256 totalWeight;
         bool executed;
@@ -101,10 +107,10 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
     // ─────────────────────────────────────────────────────────────
 
     event RecoveryInitiated(
-        address indexed account, address indexed initiator, bytes32 indexed newCredentialHash, uint256 executeAfter
+        address indexed account, address indexed initiator, bytes32 indexed newCredentialId, uint256 executeAfter
     );
     event GuardianApproved(address indexed account, address indexed guardian, uint256 weight, uint256 totalWeight);
-    event RecoveryExecuted(address indexed account, bytes32 indexed newCredentialHash);
+    event RecoveryExecuted(address indexed account, bytes32 indexed newCredentialId);
     event RecoveryCancelled(address indexed account, address indexed cancelledBy);
     event GuardianAdded(address indexed account, address indexed guardian, uint256 weight);
     event GuardianRemoved(address indexed account, address indexed guardian);
@@ -199,48 +205,18 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // ERC-7579 Validation
-    // ─────────────────────────────────────────────────────────────
-
-    /**
-     * @notice This module does NOT validate standard UserOps.
-     * It is a recovery-only module. Always returns FAILED.
-     * The TimeLockValidator handles normal UserOp validation.
-     */
-    // [FIXED] IValidator.validateUserOp takes exactly (userOp, userOpHash) —
-    // the extra trailing uint256 here didn't match the interface, so this
-    // never actually implemented IValidator ("should be marked as abstract").
-    function validateUserOp(PackedUserOperation calldata, bytes32) external pure override returns (uint256) {
-        return 1; // SIG_VALIDATION_FAILED — intentional
-    }
-
-    /**
-     * @notice EIP-1271 — not supported by this module.
-     */
-    function isValidSignatureWithSender(address, bytes32, bytes calldata) external pure override returns (bytes4) {
-        return 0xffffffff;
-    }
-
-    // ─────────────────────────────────────────────────────────────
     // Recovery flow
     // ─────────────────────────────────────────────────────────────
 
     /**
-     * @notice Initiate a recovery request.
-     * Can be called by any guardian OR the account itself.
-     *
-     * @param account The account to recover.
-     * @param newCredentialHash keccak256 of the new credential to install
-     * (e.g. keccak256(abi.encode(credentialId, pubKeyX, pubKeyY))).
-     * @param newValidator Address of new validator module to install (address(0) = keep existing).
-     * @param newValidatorData Install calldata for the new validator module.
+     * @notice Initiate a recovery request. Callable by any guardian OR the account itself.
+     * Executing it (after the delay and with enough guardian weight) REPLACES all of the
+     * account's passkeys with the new one; the new passkey is the only way back in.
+     * @param newCredentialId credential id of the replacement passkey
+     * @param newPubKey P-256 (x, y) public key of the replacement passkey
      */
-    function initiateRecovery(
-        address account,
-        bytes32 newCredentialHash,
-        address newValidator,
-        bytes calldata newValidatorData
-    ) external {
+    function initiateRecovery(address account, bytes32 newCredentialId, uint256[2] calldata newPubKey) external {
+        if (newCredentialId == bytes32(0) || newPubKey[0] == 0 || newPubKey[1] == 0) revert InvalidGuardian();
         AccountConfig storage cfg = _configs[account];
         if (!cfg.initialized) revert ModuleNotInitialized();
 
@@ -256,9 +232,8 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
         delete _recoveries[account];
 
         RecoveryRequest storage newReq = _recoveries[account];
-        newReq.newCredentialHash = newCredentialHash;
-        newReq.newValidator = newValidator;
-        newReq.newValidatorData = newValidatorData;
+        newReq.newCredentialId = newCredentialId;
+        newReq.newPubKey = newPubKey;
         newReq.initiatedAt = block.timestamp;
         newReq.initiator = msg.sender;
 
@@ -271,7 +246,7 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
             emit GuardianApproved(account, msg.sender, g.weight, newReq.totalWeight);
         }
 
-        emit RecoveryInitiated(account, msg.sender, newCredentialHash, block.timestamp + RECOVERY_DELAY);
+        emit RecoveryInitiated(account, msg.sender, newCredentialId, block.timestamp + RECOVERY_DELAY);
     }
 
     /**
@@ -451,8 +426,8 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
         external
         view
         returns (
-            bytes32 newCredentialHash,
-            address newValidator,
+            bytes32 newCredentialId,
+            uint256[2] memory newPubKey,
             uint256 initiatedAt,
             uint256 executeAfter,
             uint256 totalWeight,
@@ -463,8 +438,8 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
     {
         RecoveryRequest storage req = _recoveries[account];
         return (
-            req.newCredentialHash,
-            req.newValidator,
+            req.newCredentialId,
+            req.newPubKey,
             req.initiatedAt,
             req.initiatedAt == 0 ? 0 : req.initiatedAt + RECOVERY_DELAY,
             req.totalWeight,
@@ -497,7 +472,7 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
     // ─────────────────────────────────────────────────────────────
 
     function isModuleType(uint256 moduleTypeId) external pure override returns (bool) {
-        return moduleTypeId == MODULE_TYPE_VALIDATOR;
+        return moduleTypeId == MODULE_TYPE_EXECUTOR;
     }
 
     function isInitialized(address account) external view override returns (bool) {
@@ -509,69 +484,21 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
     // ─────────────────────────────────────────────────────────────
 
     /**
-     * @dev Execute the approved recovery:
-     * 1. Mark as executed (effects before interactions).
-     * 2. If a new validator module is specified, call the account to
-     * uninstall the old BiometricValidator and install the new one.
-     * 3. If no new module, call the existing BiometricValidator to
-     * update the credential (via a known interface).
-     * 4. Emit RecoveryExecuted.
-     *
-     * @dev The account must have authorised this module as an executor
-     * (ERC-7579 executor permission) to call executeFromExecutor.
+     * @dev Execute the approved recovery: effects first, then ask the account (this module must be
+     * an installed EXECUTOR) to call BiometricValidator.recoverCredential(newId, newPubKey).
      */
     function _executeRecovery(address account) internal {
         RecoveryRequest storage req = _recoveries[account];
-
-        // Effects first — reentrancy safe
         req.executed = true;
 
-        bytes32 credHash = req.newCredentialHash;
-        address newValidator = req.newValidator;
-        bytes memory installData = req.newValidatorData;
+        bytes32 credId = req.newCredentialId;
+        uint256[2] memory pk = req.newPubKey;
+        emit RecoveryExecuted(account, credId);
 
-        emit RecoveryExecuted(account, credHash);
-
-        if (newValidator != address(0)) {
-            // Full validator rotation: uninstall current BiometricValidator, install new one.
-            // ERC-7579: account.uninstallModule(MODULE_TYPE_VALIDATOR, oldValidator, "")
-            // account.installModule(MODULE_TYPE_VALIDATOR, newValidator, installData)
-            //
-            // Encoded as a batch execute via executeFromExecutor.
-            bytes memory uninstallCall = abi.encodeWithSignature(
-                "uninstallModule(uint256,address,bytes)",
-                1, // MODULE_TYPE_VALIDATOR
-                address(0), // current validator — account resolves this internally
-                ""
-            );
-            bytes memory installCall =
-                abi.encodeWithSignature("installModule(uint256,address,bytes)", 1, newValidator, installData);
-
-            // Batch: [uninstall, install]
-            // ERC-7579 batch mode expects abi.encode(Execution[]) — the old code encoded two
-            // loose byte strings, which the account cannot decode.
-            Execution[] memory execs = new Execution[](2);
-            execs[0] = Execution({target: account, value: 0, callData: uninstallCall});
-            execs[1] = Execution({target: account, value: 0, callData: installCall});
-            bytes memory batchData = abi.encode(execs);
-
-            IERC7579Account(account)
-                .executeFromExecutor(
-                    ModeLib.encodeSimpleBatch(), // [FIXED] was a raw int literal, not a ModeCode
-                    batchData
-                );
-        } else {
-            // Credential-only rotation: call the existing validator module
-            // to update the registered credential via a known selector.
-            // The BiometricValidator must expose: rotateCredential(bytes32 credentialHash)
-            bytes memory rotateCall = abi.encodeWithSignature("rotateCredential(bytes32)", credHash);
-
-            IERC7579Account(account)
-                .executeFromExecutor(
-                    ModeLib.encodeSimpleSingle(), // [FIXED] was a raw int literal, not a ModeCode
-                    abi.encodePacked(account, uint256(0), rotateCall)
-                );
-        }
+        bytes memory call_ = abi.encodeWithSignature("recoverCredential(bytes32,uint256[2])", credId, pk);
+        // ERC-7579 single exec is PACKED: target(20) || value(32) || calldata
+        IERC7579Account(account)
+            .executeFromExecutor(ModeLib.encodeSimpleSingle(), abi.encodePacked(biometricValidator, uint256(0), call_));
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -583,13 +510,5 @@ contract GuardianValidator is IValidator, ReentrancyGuard {
         for (uint256 i = 0; i < list.length; i++) {
             total += _guardians[account][list[i]].weight;
         }
-    }
-
-    function _buildExecution(address target, uint256 value, bytes memory callData)
-        internal
-        pure
-        returns (bytes memory)
-    {
-        return abi.encode(target, value, callData);
     }
 }

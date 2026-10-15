@@ -2,7 +2,8 @@
 pragma solidity ^0.8.23;
 import {PackedUserOperation} from "account-abstraction/interfaces/PackedUserOperation.sol";
 
-import {IHook} from "erc7579/interfaces/IERC7579Module.sol";
+import {RouterGated} from "./lib/RouterGated.sol";
+import {IModule} from "erc7579/interfaces/IERC7579Module.sol";
 
 /**
  * @title MultiSigUpgradeGuard
@@ -14,7 +15,9 @@ import {IHook} from "erc7579/interfaces/IERC7579Module.sol";
  *
  * Layer: Core Security
  */
-contract MultiSigUpgradeGuard is IHook {
+contract MultiSigUpgradeGuard is IModule, RouterGated {
+    constructor(address router_) RouterGated(router_) {}
+
     uint256 constant MODULE_TYPE_HOOK = 4;
     uint256 public constant UPGRADE_DELAY = 72 hours; // 3-day mandatory wait
     uint256 public constant MAX_GUARDIANS = 10;
@@ -172,8 +175,11 @@ contract MultiSigUpgradeGuard is IHook {
         // to pass preCheck below. Actual module swap still happens via the
         // account's own execute() path — this only authorizes preCheck to
         // let that specific call through instead of always reverting it.
-        pendingExecution[account] =
-            ExecutionGrant({moduleType: proposal.moduleType, module: proposal.proposedModule, expiresAt: block.timestamp + GRANT_VALIDITY});
+        pendingExecution[account] = ExecutionGrant({
+            moduleType: proposal.moduleType,
+            module: proposal.proposedModule,
+            expiresAt: block.timestamp + GRANT_VALIDITY
+        });
     }
 
     /**
@@ -199,16 +205,15 @@ contract MultiSigUpgradeGuard is IHook {
     /**
      * @notice Pre-execution hook. Detects and blocks unauthorized upgrade calls.
      */
-    // [FIXED] Must match IHook.preCheck(msgSender, msgValue, msgData). The old
-    // 4-arg signature never matched, so the account's hook call would revert on
-    // EVERY execution (bricking the vault). A hook is called by the account itself,
-    // so `msg.sender` IS the account; nobody else can burn another account's grant.
-    function preCheck(address msgSender, uint256, bytes calldata callData)
+    // Called by EthosiHookRouter (which the account calls on execute / executeFromExecutor /
+    // installModule / uninstallModule). For module-management calls the router passes
+    // target = account and callData = the full msg.data. `account` is trusted because only
+    // the router can call this (RouterGated) and the router only forwards its own caller.
+    function preCheck(address account, address target, uint256, bytes calldata callData)
         external
-        override
+        onlyRouter
         returns (bytes memory)
     {
-        address account = msg.sender;
         // Detect installModule / uninstallModule selectors (ERC-7579)
         if (callData.length >= 4) {
             bytes4 selector = bytes4(callData[:4]);
@@ -239,11 +244,11 @@ contract MultiSigUpgradeGuard is IHook {
                     // TYPE_VALIDATOR) — verify this matches how VaultFactory /
                     // off-chain tooling actually calls proposeUpgrade before
                     // relying on this in production.
-                    bool grantValid = decodeOk && grant.expiresAt > block.timestamp
-                        && grant.module == module && grant.moduleType == bytes4(uint32(moduleTypeId));
+                    bool grantValid = decodeOk && grant.expiresAt > block.timestamp && grant.module == module
+                        && grant.moduleType == bytes4(uint32(moduleTypeId));
 
                     if (!grantValid) {
-                        emit UpgradeAttemptBlocked(account, msgSender, address(0));
+                        emit UpgradeAttemptBlocked(account, msg.sender, target);
                         revert("EthosiFi: Module upgrades require guardian consensus. Use proposeUpgrade().");
                     }
 
@@ -256,7 +261,7 @@ contract MultiSigUpgradeGuard is IHook {
         return "";
     }
 
-    function postCheck(bytes calldata) external pure override {}
+    function postCheck(bytes calldata) external pure {}
 
     // ─────────────────────────────────────────────
     // View Helpers

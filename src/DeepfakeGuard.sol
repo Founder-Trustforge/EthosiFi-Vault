@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: BSL-1.1
 pragma solidity ^0.8.23;
+import {RouterGated} from "./lib/RouterGated.sol";
 import {PackedUserOperation} from "account-abstraction/interfaces/PackedUserOperation.sol";
 
 import {IModule} from "erc7579/interfaces/IERC7579Module.sol";
@@ -24,8 +25,10 @@ import {IModule} from "erc7579/interfaces/IERC7579Module.sol";
  *
  * Layer: User Protection (Pillar 5)
  */
-contract DeepfakeGuard is IModule {
+contract DeepfakeGuard is IModule, RouterGated {
     uint256 constant MODULE_TYPE_HOOK = 4;
+
+    constructor(address router_) RouterGated(router_) {}
 
     uint256 public constant CHALLENGE_EXPIRY = 3 minutes; // Challenge must be answered in 3 min
     uint256 public constant COOLOFF_THRESHOLD = 3; // Rapid attempts before cooloff
@@ -99,6 +102,7 @@ contract DeepfakeGuard is IModule {
 
     function preCheck(address account, address recipient, uint256 value, bytes calldata callData)
         external
+        onlyRouter
         returns (bytes memory)
     {
         GuardConfig storage config = configs[account];
@@ -110,7 +114,9 @@ contract DeepfakeGuard is IModule {
         PressureProfile storage pressure = pressureProfiles[account];
         if (pressure.inCooloff) {
             if (block.timestamp < pressure.cooloffUntil) {
-                revert("EthosiFi DeepfakeGuard: Vault is in mandatory cooloff. Possible social engineering detected. Try again later or contact your guardians.");
+                revert(
+                    "EthosiFi DeepfakeGuard: Vault is in mandatory cooloff. Possible social engineering detected. Try again later or contact your guardians."
+                );
             } else {
                 pressure.inCooloff = false;
                 emit CooloffLifted(account);
@@ -130,7 +136,9 @@ contract DeepfakeGuard is IModule {
             // Track rapid attempts — indicator of social engineering pressure
             _trackAttempt(account, amount);
 
-            revert("EthosiFi DeepfakeGuard: Large transfer requires human verification. Call requestChallenge() and respond within 3 minutes. This protects you from AI-powered impersonation attacks.");
+            revert(
+                "EthosiFi DeepfakeGuard: Large transfer requires human verification. Call requestChallenge() and respond within 3 minutes. This protects you from AI-powered impersonation attacks."
+            );
         }
 
         // Verify challenge hasn't expired
@@ -156,11 +164,10 @@ contract DeepfakeGuard is IModule {
      *        (e.g., "type the 3rd and 7th word of your vault's creation phrase" —
      * words are displayed on-screen, never stored, and rotate every session)
      */
-    function requestChallenge(
-        address recipient,
-        uint256 amount,
-        bytes32 puzzleAnswer
-    ) external returns (bytes32 challengeId) {
+    function requestChallenge(address recipient, uint256 amount, bytes32 puzzleAnswer)
+        external
+        returns (bytes32 challengeId)
+    {
         require(configs[msg.sender].initialized, "Not initialized");
 
         // Check cooloff
@@ -191,10 +198,7 @@ contract DeepfakeGuard is IModule {
      * @param challengeId The challenge to answer
      * @param answer        The user's response (hashed with nonce on frontend)
      */
-    function answerChallenge(
-        bytes32 challengeId,
-        bytes32 answer
-    ) external returns (bool passed) {
+    function answerChallenge(bytes32 challengeId, bytes32 answer) external returns (bool passed) {
         require(configs[msg.sender].initialized, "Not initialized");
 
         Challenge storage challenge = challenges[msg.sender][challengeId];
@@ -279,16 +283,20 @@ contract DeepfakeGuard is IModule {
         return 0;
     }
 
-    function getChallengeStatus(address account, bytes32 challengeId) external view returns (
-        bool answered, bool passed, uint256 expiresAt, bool expired
-    ) {
+    function getChallengeStatus(address account, bytes32 challengeId)
+        external
+        view
+        returns (bool answered, bool passed, uint256 expiresAt, bool expired)
+    {
         Challenge storage c = challenges[account][challengeId];
         return (c.answered, c.passed, c.expiresAt, block.timestamp > c.expiresAt);
     }
 
-    function getPressureStatus(address account) external view returns (
-        uint256 attemptCount, bool inCooloff, uint256 cooloffUntil
-    ) {
+    function getPressureStatus(address account)
+        external
+        view
+        returns (uint256 attemptCount, bool inCooloff, uint256 cooloffUntil)
+    {
         PressureProfile storage p = pressureProfiles[account];
         return (p.attemptCount, p.inCooloff, p.cooloffUntil);
     }

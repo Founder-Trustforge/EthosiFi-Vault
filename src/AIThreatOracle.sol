@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: BSL-1.1
 pragma solidity ^0.8.23;
+import {RouterGated} from "./lib/RouterGated.sol";
 import {PackedUserOperation} from "account-abstraction/interfaces/PackedUserOperation.sol";
 
 import {IModule} from "erc7579/interfaces/IERC7579Module.sol";
@@ -29,7 +30,7 @@ import {IModule} from "erc7579/interfaces/IERC7579Module.sol";
  *
  * Layer: User Protection (Pillar 4)
  */
-contract AIThreatOracle is IModule {
+contract AIThreatOracle is IModule, RouterGated {
     /**
      * @dev [CRIT-FIX 2026-09] addTrustedOracle() and updateGlobalScore() had zero
      *      access control — any address could register itself as a trusted oracle,
@@ -112,7 +113,7 @@ contract AIThreatOracle is IModule {
     event TrustedOracleAdded(address indexed oracle);
     event TrustedOracleRemoved(address indexed oracle);
 
-    constructor() {
+    constructor(address router_) RouterGated(router_) {
         owner = msg.sender;
     }
 
@@ -145,6 +146,7 @@ contract AIThreatOracle is IModule {
 
     function preCheck(address account, address target, uint256 value, bytes calldata callData)
         external
+        onlyRouter
         returns (bytes memory)
     {
         OracleConfig storage config = configs[account];

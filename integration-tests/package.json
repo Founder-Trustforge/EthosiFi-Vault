@@ -1,0 +1,13 @@
+{
+  "name": "ethosifi-vault-integration-tests",
+  "private": true,
+  "version": "1.0.0",
+  "description": "End-to-end tests: real EntryPoint v0.7 + MSAAdvanced account + all EthosiFi modules on a Cancun EVM",
+  "scripts": { "build": "node build.js", "test": "node suite.js" },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.0",
+    "ethers": "^6.13.0",
+    "hardhat": "^2.22.0",
+    "solc": "0.8.33"
+  }
+}

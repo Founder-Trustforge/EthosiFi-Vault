@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # EthosiFi Vault
 
 ### The Unstealable Wallet.
@@ -57,91 +56,100 @@ Every competitor warns users about threats. EthosiFi Vault **prevents them at th
 
 ## Architecture
 
+The vault is a standard ERC-4337 v0.7 / ERC-7579 smart account (rhinestone `MSAAdvanced` behind an
+`MSAProxy`), created and fully configured **atomically** by `VaultFactory` (no half-configured window).
+
 ```
-User Request
-     │
-     ▼
-┌─────────────────────────────────────────────────────┐
-│                   VaultFactory                       │
-│         (One-click deployment, CREATE2)              │
-└─────────────────────┬───────────────────────────────┘
-                      │ Installs all modules
-                      ▼
-┌─────────────────────────────────────────────────────┐
-│              EthosiFi Smart Account                  │
-│                  (ERC-7579)                          │
-│                                                      │
-│  ┌──────────────────────────────────────────────┐   │
-│  │           LAYER 1: CORE SECURITY             │   │
-│  │  BiometricValidator  →  TimeLockValidator    │   │
-│  │  GuardianValidator   →  EmergencyFreeze      │   │
-│  │  MultiSigUpgradeGuard                        │   │
-│  └──────────────────────────────────────────────┘   │
-│  ┌──────────────────────────────────────────────┐   │
-│  │         LAYER 2: USER PROTECTION             │   │
-│  │  PoisonedAddressProtection → AntiScamScreener│   │
-│  │  PlainEnglishExecutor → AIThreatOracle       │   │
-│  │  DeepfakeGuard                               │   │
-│  └──────────────────────────────────────────────┘   │
-│  ┌──────────────────────────────────────────────┐   │
-│  │          LAYER 3: UX & ACCESSIBILITY         │   │
-│  │  SeniorModeValidator  →  PaymasterManager    │   │
-│  └──────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────┘
-                      │
-                      ▼
-              ERC-4337 EntryPoint
-                      │
-                      ▼
-                  Execution
+                    ┌────────────── who may sign (validators) ──────────────┐
+ fingerprint   ───▶ │ BiometricValidator   passkey (WebAuthn P-256, UV)  FULL │
+ spending key  ───▶ │ TimeLockValidator    own key: small transfers only      │
+ guardians     ───▶ │ GuardianValidator    time-delayed passkey recovery only │
+                    └──────────────────────────┬─────────────────────────────┘
+                                               ▼
+                          MSAAdvanced.execute / executeFromExecutor / (un)installModule
+                                               │  single hook slot
+                                               ▼
+                    ┌──────────── EthosiHookRouter (every call, every inner call) ────────────┐
+                    │ TimeLockValidator  spending-key velocity budget (24h, ≤10 txs, per token) │
+                    │ EmergencyFreeze    guardian panic button                                  │
+                    │ MultiSigUpgradeGuard  module changes need guardian consensus + delay      │
+                    │ AntiScamScreener   flagged recipients / spenders (transfer, approve, …)   │
+                    │ PoisonedAddressProtection  address-poisoning + full-address confirmation  │
+                    │ SeniorModeGuard    hours, approved recipients, per-token daily limits     │
+                    └───────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Transaction Flow:**
+* **Two-tier authority.** Only the passkey (fingerprint, `userVerification` required) has full authority.
+  The *spending key* is a separate key that can do exactly three things: send native / ERC-20 `transfer`
+  up to a per-tx cap, queue a delayed transaction, cancel one. It cannot approve, batch, delegatecall,
+  install modules, change policy, rotate itself or sign messages.
+* **No drip-drain.** Every spending-key transfer is charged against an exact sliding-window budget per
+  token (24h, at most 10 transfers, at most `windowLimit`). Over budget → the execution reverts.
+  Tokens without a policy are untouchable by the spending key; enabling one is queued for 48h.
+* **Fingerprint-confirmed release, 48h expiry.** Anything larger (or over budget) is queued with
+  `initiateDelayedTx`. The off-chain notifier texts the owner a link; the funds move only when a WebAuthn
+  fingerprint assertion over `confirmationChallenge(account, txHash)` reaches `confirmAndRelease`. The SMS
+  is only a notification — a SIM-swapper cannot release anything. Unconfirmed after 48h → dead.
+* **Gas tank.** A spending-key op must be prefunded entirely from the vault's EntryPoint deposit, never from
+  its balance, so a stolen spending key can burn at most the tank (`createVault{value}` funds it).
+* **Router fail-closed.** `execute` single/batch inner calls are decoded exactly as the account decodes them;
+  malformed encodings revert; delegatecall/unknown call types are refused while the router is installed.
+  Policy hooks only accept calls from the router (`RouterGated`).
+
+### What is NOT protected (read this)
+
+* A stolen **passkey + the owner's fingerprint** has full authority (as with any signing key). Hooks still
+  apply (freeze, scam screening, senior limits) but the budget/delay tier does not.
+* Passkey signatures are blind (WebAuthn signs a hash): the wallet UI is responsible for showing what is signed.
+* The threat registries (`AntiScamScreener`, `PoisonedAddressProtection`) are owned by EthosiFi: that owner can
+  *block* destinations, never move funds. Put the owner behind a multisig.
+* Validation uses `block.timestamp`-free logic but touches EntryPoint deposit/transient storage; run your own
+  bundler (or stake the entities) before relying on public ERC-7562 mempools.
+* `PlainEnglishExecutor`, `AIThreatOracle`, `DeepfakeGuard` are **experimental and not allow-listed** by the
+  factory; `PaymasterManager` is not a real ERC-4337 paymaster yet. Do not rely on them.
+* Requires the EIP-7951/RIP-7212 P-256 precompile at `0x100` (Sepolia: yes since Fusaka; fail-closed otherwise).
+* Not externally audited. Do not use with real funds.
+
+**Transaction flow**
 ```
-UserOp → BiometricValidator (auth) → AIThreatOracle (risk score)
-       → AntiScamScreener (threat check) → PoisonedAddressProtection (address verify)
-       → PlainEnglishExecutor (human confirm) → TimeLockValidator (delay if needed)
-       → DeepfakeGuard (challenge if large) → PaymasterManager (gasless)
-       → Execution
+UserOp ─▶ EntryPoint ─▶ account.validateUserOp ─▶ validator chosen by the nonce key
+       ─▶ account.execute ─▶ EthosiHookRouter ─▶ [budget, freeze, upgrade guard, screener, …] ─▶ call
 ```
 
 ---
 
 ## Contract Reference
 
-### Layer 1 — Core Security
+### Authorities
 
 | Contract | Description |
 |----------|-------------|
-| `TimeLockValidator.sol` | **The heart of the vault.** Mandatory 48-hour delay on high-value transfers (>$10k). Biometric bypass for instant execution. Guardians can cancel or approve during the window. |
-| `BiometricValidator.sol` | WebAuthn/FIDO2 biometric verification. Binds Face ID / Touch ID directly to signing authority. No seed phrases. Uses P256 curve (EIP-7212 compatible). |
-| `GuardianValidator.sol` | Weighted social recovery network. Threshold-based consensus with cooldown periods. The human firewall that backs up the technical one. |
-| `EmergencyFreeze.sol` | Instant panic button. Any guardian freezes ALL outgoing transactions in one block. Guardian multi-sig required to unfreeze. |
-| `MultiSigUpgradeGuard.sol` | Prevents ANY module upgrade without guardian consensus + 72-hour delay. Closes the supply-chain attack vector behind the Bybit and Trust Wallet breaches. |
+| `BiometricValidator.sol` | WebAuthn/FIDO2 passkey = fingerprint. Per-account credentials, UV flag + rpId (`ethosifi.com`) enforced, challenge bound to the userOpHash. |
+| `TimeLockValidator.sol` | Spending key validator + velocity budget (sub-hook) + delayed tx queue + fingerprint release + per-token policy (loosening queued). |
+| `GuardianValidator.sol` | Weighted social recovery (executor): replaces the passkey after threshold weight + 48h; any guardian/the user can cancel. |
 
-### Layer 2 — User Protection
+### Policy hooks (behind `EthosiHookRouter`)
 
 | Contract | Description |
 |----------|-------------|
-| `PoisonedAddressProtection.sol` | Forces full address display and on-chain confirmation before transfers. Detects lookalike addresses (first/last byte matching). Kills address poisoning — 65.4M attacks detected in 2025. |
-| `AntiScamScreener.sol` | Real-time screening against malicious contracts, phishing addresses, and rug-pull tokens. Blocks BEFORE the mempool. Integrates with Chainalysis and Cyvers threat feeds. |
-| `PlainEnglishExecutor.sol` | Translates every transaction into human language before signing. Kills blind signing — root cause of 90% of DeFi exploits. On-chain committed summaries. |
-| `AIThreatOracle.sol` | Real-time AI risk scoring (0–100) per transaction. Factors: recipient history, contract age, behavioral anomalies, attack patterns. Scores above 85 are auto-blocked. |
-| `DeepfakeGuard.sol` | Timed cryptographic challenge for large transfers. Defends against AI voice/video impersonation (up 1,633% in Q1 2025). Detects social engineering pressure via rapid-attempt tracking. |
-
-### Layer 3 — UX & Accessibility
-
-| Contract | Description |
-|----------|-------------|
-| `SeniorModeValidator.sol` | Maximum protection for elderly users. Daily limits, time-of-day restrictions, guardian control of all address approvals, mandatory delays on ALL transfers. |
-| `PaymasterManager.sol` | Full ERC-4337 gasless infrastructure. Pay fees in USDC, DAI, or USDT. Never hold ETH. 10 free sponsored tx/month on Free tier. |
+| `EmergencyFreeze.sol` | Any guardian freezes ALL outgoing calls in one block; guardian vote to unfreeze. |
+| `MultiSigUpgradeGuard.sol` | `installModule` / `uninstallModule` only with guardian consensus + delay (single-use grant). |
+| `AntiScamScreener.sol` | Blocks flagged targets AND flagged recipients/spenders inside transfer/approve/transferFrom/setApprovalForAll. |
+| `PoisonedAddressProtection.sol` | Lookalike-address refusal + single-use full-address confirmation for large first-time transfers. |
+| `SeniorModeGuard.sol` | Allowed hours, guardian-approved recipients, per-token tx/daily limits (increases queued 24h). |
 
 ### Infrastructure
 
 | Contract | Description |
 |----------|-------------|
-| `VaultFactory.sol` | One-click vault deployment with all 12 modules pre-installed. CREATE2 deterministic addresses — know your vault address before deployment. |
-| `Deploy.s.sol` | Forge deployment script. Sequential deployment with address linking, env var management, and full Etherscan verification support. |
+| `VaultFactory.sol` | Deploys `MSAProxy` + `EthosiBootstrap` in the proxy constructor. Immutable addresses, no owner, CREATE2 (`getAddress`). `msg.value` funds the gas tank. |
+| `EthosiHookRouter.sol` | The account's single hook; fans every call out to per-account sub-hooks. |
+| `EthosiBootstrap.sol` | Delegatecalled once at init to install validators, executors and the router. |
+| `Deploy.s.sol` | Forge script: deploys everything in dependency order. |
+
+### Experimental (not allow-listed)
+
+`PlainEnglishExecutor`, `AIThreatOracle`, `DeepfakeGuard`, `PaymasterManager` — see limitations above.
 
 ---
 
@@ -250,37 +258,23 @@ forge verify-contract <ADDRESS> TimeLockValidator \
 | PlainEnglishExecutor | `pending` |
 | AIThreatOracle | `pending` |
 | DeepfakeGuard | `pending` |
-| SeniorModeValidator | `pending` |
-| PaymasterManager | `pending` |
+| SeniorModeGuard | `pending` |
+| EthosiHookRouter | `pending` |
+| EthosiBootstrap | `pending` |
 
 ---
 
 ## Testing
 
 ```bash
-# Run all tests
-forge test -vv
-
-# Run with gas report
-forge test --gas-report
-
-# Fuzz testing
-forge test --fuzz-runs 10000
-
-# Static analysis
-slither src/
+# Integration suite: real EntryPoint v0.7 + real MSAAdvanced account + all modules, on a Cancun EVM
+cd integration-tests && npm install && npm run build && npm test
 ```
 
-### Test Coverage Targets
-
-| Module | Unit Tests | Integration | Fuzz |
-|--------|-----------|-------------|------|
-| TimeLockValidator | ✅ | ✅ | ✅ |
-| BiometricValidator | ✅ | ✅ | — |
-| GuardianValidator | ✅ | ✅ | ✅ |
-| EmergencyFreeze | ✅ | ✅ | — |
-| PoisonedAddressProtection | ✅ | ✅ | ✅ |
-| All others | In progress | In progress | In progress |
+The suite deploys the factory and creates vaults through it, then drives real ERC-4337 `handleOps` flows:
+passkey and spending-key sends, budget/drip-drain limits, delayed tx + fingerprint release + 48h expiry,
+guardian recovery, every policy hook, a calldata-mutation fuzz of the router, reentrancy, and a set of
+attacker scenarios (see `integration-tests/suite.js`). `forge test` unit tests are not yet written.
 
 ---
 
@@ -290,7 +284,7 @@ slither src/
 
 | Firm | Status | Report |
 |------|--------|--------|
-| TBD | Scheduled Q2 2026 | Pending |
+| TBD | Not yet engaged | — |
 
 We will publish the **complete, unredacted audit report** upon completion.  
 No production mainnet deployment will occur before a full external audit.
@@ -343,45 +337,11 @@ See [LICENSE](./LICENSE) for full terms.
 | **Founder** | founder@ethosifi.com |
 | **Security** | security@ethosifi.com |
 | **Enterprise** | enterprise@ethosifi.com |
-| **Website** | [ethosifi.xyz](https://ethosifi.xyz) |
+| **Vault** | [ethosifi.com](https://ethosifi.com) |
+| **Community Hub** | [ethosifi.xyz](https://ethosifi.xyz) |
 | **Twitter/X** | [@ethosifi](https://twitter.com/ethosifi) |
 | **GitHub** | [github.com/Founder-Trustforge/EthosiFi-Vault](https://github.com/Founder-Trustforge/EthosiFi-Vault) |
 
 ---
 
 *© 2025 EthosiFi, Inc. Built with ❤️ for the people who've lost enough.*
-=======
-# EthosiFi-Vault
-The unstealable Wallet
-## License
-
-EthosiFi is licensed under the Business Source License 1.1 (BSL 1.1).
-
-- **Non-commercial use**: Free (personal, educational, research)
-- **Commercial use**: Contact founder@ethosifi.com for licensing
-- **Open source**: Converts to GPL-3.0 on January 1, 2029
-
-See [LICENSE](./LICENSE) for full terms.
-# EthosiFi Vault
-
-The unstealable wallet. Time-locked protection with biometric bypass.
-
-## Overview
-
-EthosiFi Vault is a smart contract wallet built on ERC-7579 that makes crypto assets unstealable through:
-
-- **Time-locked withdrawals**: 48-hour mandatory delay on high-value transfers
-- **Biometric bypass**: Face ID/Touch ID for instant transactions
-- **Guardian network**: Social recovery with time delays
-- **Gasless UX**: Pay in USDC, never hold ETH
-
-## Architecture
-UserOp → BiometricValidator → TimeLockValidator → GuardianValidator → Execution
-(instant auth)       (delay if needed)   (recovery only)
-
-## Contracts
-
-- `TimeLockValidator.sol`: Core security with delays and bypass
-- `BiometricValidator.sol`: WebAuthn/FIDO2 signature verification
-- `GuardianValidator.sol`: Social recovery with time delays
->>>>>>> origin/main

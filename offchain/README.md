@@ -6,6 +6,11 @@
 3. Confirm page reads the transfer from chain, user scans fingerprint (WebAuthn, enrolled passkey) -> `confirmAndRelease` verifies it on-chain -> funds move.
 4. No valid fingerprint within 48h -> `confirmAndRelease` reverts "Expired"; anyone may call `expireTx` to mark it cancelled.
 
+## Notes (v2 vault)
+- Spending-key ops are paid from the account's EntryPoint deposit (the "gas tank"); fund it with `createVault{value}` or `EntryPoint.depositTo(account)`, or the key cannot send.
+- The confirm page must pass the challenge from `TimeLockValidator.confirmationChallenge(account, txHash)` to the passkey. SMS is a notification only; it grants nothing.
+- Old Sepolia addresses shown on the site belong to the pre-fix contracts. Update them after redeploying (`script/Deploy.s.sol`).
+
 ## Deploy
 supabase db push   # migration in supabase/migrations
 supabase functions deploy tx-notifier --no-verify-jwt

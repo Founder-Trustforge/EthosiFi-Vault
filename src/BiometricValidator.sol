@@ -115,9 +115,6 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
     /// @dev account → rpIdHash (sha256 of the relying party domain, e.g. "ethosifi.com")
     mapping(address => bytes32) private _rpIdHashes;
 
-    /// @dev replay protection: sha256(authenticatorData ‖ clientDataJSON) → used
-    mapping(bytes32 => bool) private _usedAssertions;
-
     // ─────────────────────────────────────────────────────────────
     // Events
     // ─────────────────────────────────────────────────────────────
@@ -215,7 +212,6 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
     function validateUserOp(PackedUserOperation calldata userOp, bytes32 userOpHash)
         external
         override
-        nonReentrant
         returns (uint256)
     {
         if (!_initialized[msg.sender]) revert ModuleNotInitialized();
@@ -328,6 +324,31 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
     }
 
     /**
+     * @notice Guardian-recovery entry point: deactivate EVERY existing credential and enroll a
+     * single replacement. Only the account can call it; the account only does so when its
+     * installed GuardianValidator executor completes a guardian-approved, time-delayed recovery.
+     */
+    function recoverCredential(bytes32 credentialId, uint256[2] calldata pubKey) external {
+        if (!_initialized[msg.sender]) revert ModuleNotInitialized();
+        if (credentialId == bytes32(0)) revert NoCredential();
+        if (pubKey[0] == 0 || pubKey[1] == 0) revert InvalidPublicKey();
+
+        bytes32[] storage creds = _accountCredentials[msg.sender];
+        for (uint256 i = 0; i < creds.length; i++) {
+            if (_credentials[_ck(msg.sender, creds[i])].active) {
+                _credentials[_ck(msg.sender, creds[i])].active = false;
+                emit CredentialRevoked(msg.sender, creds[i]);
+            }
+        }
+        _credentials[_ck(msg.sender, credentialId)] =
+            Credential({publicKey: pubKey, active: true, registeredAt: block.timestamp});
+        if (!_isAccountCredential(msg.sender, credentialId)) creds.push(credentialId);
+        _primaryCredential[msg.sender] = credentialId;
+        emit CredentialRegistered(msg.sender, credentialId, true);
+        emit PrimaryCredentialChanged(msg.sender, credentialId);
+    }
+
+    /**
      * @notice Revoke a credential (lost/stolen device).
      * Cannot revoke the primary unless another active credential exists.
      */
@@ -427,16 +448,12 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
         uint256[2] storage pubKey,
         bytes32 challenge,
         bytes32 rpIdHash
-    ) internal returns (bool) {
-        bool valid = _verifyWebAuthnView(sig, pubKey, challenge, rpIdHash);
-        if (valid) {
-            // Consume the assertion so it can't be replayed by a second
-            // validateUserOp call. Only the real execution path marks this —
-            // the view-only ERC-1271 check above never does.
-            bytes32 assertionHash = keccak256(abi.encodePacked(sig.authenticatorData, sig.clientDataJSON));
-            _usedAssertions[assertionHash] = true;
-        }
-        return valid;
+    ) internal view returns (bool) {
+        // No assertion-replay registry: for userOps the challenge IS the userOpHash (chain, EntryPoint,
+        // account and nonce bound), so an assertion can only ever authorise that one op. A global
+        // "used assertions" map would also be unassociated storage written during validation, which
+        // ERC-7562 bundlers reject.
+        return _verifyWebAuthnView(sig, pubKey, challenge, rpIdHash);
     }
 
     /// @dev Same checks as _verifyWebAuthn, but strictly read-only: verifies
@@ -455,7 +472,7 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
         // ── Step 2: rpIdHash check ────────────────────────────────
         bytes32 authRpIdHash;
         assembly {
-            authRpIdHash := mload(add(mload(add(sig, 0x20)), 0x20))
+            authRpIdHash := mload(add(mload(sig), 0x20)) // sig.authenticatorData is the FIRST struct member
         }
         if (authRpIdHash != rpIdHash) revert InvalidRpIdHash();
 
@@ -481,10 +498,6 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
         // signedMessage = sha256(authenticatorData ‖ sha256(clientDataJSON))
         bytes32 clientDataHash = sha256(sig.clientDataJSON);
         bytes32 signedMessage = sha256(abi.encodePacked(sig.authenticatorData, clientDataHash));
-
-        // ── Step 7: Replay protection (check only, don't consume) ─
-        bytes32 assertionHash = keccak256(abi.encodePacked(sig.authenticatorData, sig.clientDataJSON));
-        if (_usedAssertions[assertionHash]) revert ReplayDetected();
 
         // ── Step 8: P256 signature verification ───────────────────
         return _verifyP256(signedMessage, sig.rs, pubKey);
@@ -556,7 +569,14 @@ contract BiometricValidator is IValidator, ReentrancyGuard {
     {
         // base64url of 32 bytes = 43 chars (no padding)
         uint256 encodedLen = 43;
-        if (offset + encodedLen > clientDataJSON.length) return false;
+        // The offset is NOT covered by the signature, so pin it to the real "challenge" field:
+        // it must directly follow `"challenge":"` and be closed by a `"`.
+        bytes memory prefix = bytes('"challenge":"');
+        if (offset < prefix.length || offset + encodedLen + 1 > clientDataJSON.length) return false;
+        for (uint256 k = 0; k < prefix.length; k++) {
+            if (clientDataJSON[offset - prefix.length + k] != prefix[k]) return false;
+        }
+        if (clientDataJSON[offset + encodedLen] != '"') return false;
 
         bytes memory encoded = _base64urlEncode(abi.encodePacked(expectedChallenge));
         if (encoded.length != encodedLen) return false;
