@@ -8,3 +8,6 @@ optimizer_runs = 200
 evm_version = "cancun"   # erc7579-implementation uses cancun features
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
+
+[profile.ci]
+fuzz = { runs = 256 }

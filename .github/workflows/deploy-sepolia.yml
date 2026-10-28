@@ -27,7 +27,10 @@ jobs:
           submodules: recursive
       - uses: foundry-rs/foundry-toolchain@v1
       - name: Install Solidity dependencies
-        run: npm install --no-audit --no-fund --ignore-scripts
+        run: |
+          npm install --no-audit --no-fund --ignore-scripts
+          # MSAProxy imports @openzeppelin/contracts, which is not a direct dependency of erc7579-implementation
+          npm install --no-save --no-audit --no-fund --ignore-scripts @openzeppelin/contracts@5.1.0
         working-directory: lib/erc7579-implementation
       - name: Build
         run: forge build
