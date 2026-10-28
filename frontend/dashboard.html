@@ -269,13 +269,29 @@ document.addEventListener('mousemove',e=>{mx=e.clientX;my=e.clientY;cur.style.le
 
 let activeCount=3;
 
+const IS_MOBILE=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+function getEth(){return new Promise(res=>{
+  if(window.ethereum)return res(window.ethereum);
+  const fin=()=>res(window.ethereum||null);
+  window.addEventListener('ethereum#initialized',fin,{once:true});
+  setTimeout(fin,1500);
+});}
+// Mobile browsers (Chrome/Safari) never inject window.ethereum. Hand off to the wallet app's in-app browser.
+function walletDeepLink(type){
+  if(type==='coinbase')return 'https://go.cb-w.com/dapp?cb_url='+encodeURIComponent(location.href);
+  return 'https://metamask.app.link/dapp/'+location.host+location.pathname+location.search;
+}
 const ADDR_RE=/^0x[0-9a-fA-F]{40}$/;
 if(window.ethereum&&window.ethereum.on){
   window.ethereum.on('accountsChanged',()=>location.reload());
   window.ethereum.on('chainChanged',()=>location.reload());
 }
 async function connectWallet(){
-  if(typeof window.ethereum==='undefined'){alert('Please install MetaMask from metamask.io');return;}
+  const eth=await getEth();
+  if(!eth){
+    if(IS_MOBILE){location.href=walletDeepLink('metamask');return;}
+    alert('Please install MetaMask from metamask.io and refresh.');return;
+  }
   try{
     const accounts=await window.ethereum.request({method:'eth_requestAccounts'});
     const chainId=await window.ethereum.request({method:'eth_chainId'});
